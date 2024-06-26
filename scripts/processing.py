@@ -91,20 +91,41 @@ def assign_dt(ds, dt):
     ds = ds.expand_dims(time=dt)
     return ds
 
-def calc_sdd(snowdepth, verbose=False):
-    '''Calculate snow disappearance date from a pandas series of snow depth
+def calc_sdd(snow_property, verbose=False, snow_name=None):
+    '''Calculate snow disappearance date from a pandas series of snow depth or SWE
+    Expects measurement units of meters
     Modified from From https://stackoverflow.com/questions/22000882/find-last-non-zero-elements-index-in-pandas-series
+    TODO: careful, this is not robust to late season blips, see Hoosier Pass (531) and Grizzly Peak (505) for WY 2022
     '''
     
-    # Calculate first derivative of snow depth
-    firstderiv = snowdepth.diff() / snowdepth.index.to_series().diff().dt.total_seconds()
+    # Calculate first derivative of snow property
+    firstderiv = snow_property.diff() / snow_property.index.to_series().diff().dt.total_seconds()
     
     # Determine last date at which derivative is nonzero
     snow_all_gone_date = firstderiv[firstderiv != 0].index[-1]
     
     if verbose:
         print(f'Snow all gone date {snow_all_gone_date.strftime('%Y-%m-%d')}')
-        print(f'Derivative: {firstderiv.loc[snow_all_gone_date]} m')
-        print(f'Snow depth: {snowdepth.loc[snow_all_gone_date]} m')
+        print(f'Derivative: {firstderiv.loc[snow_all_gone_date]} m/d')
+        if snow_name is None:
+            snow_name = 'Snow property value'
+        print(f'{snow_name}: {snow_property.loc[snow_all_gone_date]} m')
     
     return snow_all_gone_date, firstderiv
+
+def calc_peak(snow_property, verbose=False, snow_name=None, units='m'):
+    '''Finds date of maximum snow value from a pandas series of snow depth or SWE
+    '''
+    # Determine date of maximum value in snow property
+    peak_date = snow_property.idxmax()
+    
+    # Pull the value of the snow property at peak date
+    max_val = snow_property.loc[peak_date]
+    
+    if verbose:
+        if snow_name is None:
+            snow_name = 'Snow property value'
+        print(f'Peak {snow_name} date: {peak_date.strftime('%Y-%m-%d')}')
+        print(f'Peak {snow_name} value: {max_val} {units}')
+    
+    return peak_date, max_val
