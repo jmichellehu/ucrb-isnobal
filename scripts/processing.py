@@ -17,6 +17,8 @@ from shapely.ops import unary_union
 
 import pyproj
 
+from s3fs import S3FileSystem, S3Map
+
 sys.path.append('/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/env/')
 import helpers as h
 
@@ -250,3 +252,32 @@ def locate_snotel_in_poly(poly_fn: str, site_locs_fn: str):
     poly_sites = sites_gdf.loc[idx]
     
     return poly_sites
+
+def get_nwm_retrospective_LDAS(site_gdf, start=None, end=None, var='SNOWH'):
+    '''
+    Retrieves NWM retrospective LDAS (NoahMP land surface model output) data for a given site or sites.
+
+    Parameters:
+        site_gdf (GeoDataFrame): A GeoDataFrame containing the site locations.
+        start (str, optional): The start date of the data to retrieve. Defaults to None. Format: YYYY-MM-DD
+        end (str, optional): The end date of the data to retrieve. Defaults to None. Format: YYYY-MM-DD
+        var (str, optional): The variable to retrieve. Defaults to snow depth 'SNOWH'.
+
+    Returns:
+        list: A list of xarray Datasets containing the retrieved data for each input site.
+
+    '''
+    bucket = 's3://noaa-nwm-retrospective-3-0-pds/CONUS/zarr'
+    fs = S3FileSystem(anon=True)
+    ds = xr.open_dataset(S3Map(f"{bucket}/ldasout.zarr", s3=fs), engine='zarr')
+    
+    if var is not None:
+        ds = ds[var]
+      
+    # Extract data by each site location
+    ds_list = [np.squeeze(ds.sel(x=x, y=y, method='nearest')) for x, y in zip(site_gdf.geometry.x.values, site_gdf.geometry.y.values)]
+
+    if start is not None and end is not None:
+        ds_list = [ds.sel(time=slice(f'{start}T00:00:00', f'{end}T23:00:00')) for ds in ds_list]
+    
+    return ds_list
