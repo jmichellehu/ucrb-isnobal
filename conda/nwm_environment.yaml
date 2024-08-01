@@ -1,0 +1,31 @@
+name: nwm
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - bottleneck
+  - dask
+  - dataretrieval
+  - gdal
+  - geopandas
+  - ipykernel
+  - ipympl
+  - jupyter
+  - jupyterlab
+  - matplotlib
+  - netcdf4
+  - numpy
+  - pandas
+  - pip
+  - pyproj
+  - python
+  - s3fs
+  - scipy
+  - xarray
+  - zarr
+  - proj-data
+  - bokeh
+  - geoviews
+  - holoviews
+  - numcodecs
+prefix: /uufs/chpc.utah.edu/common/home/u6058223/software/pkg/miniconda3/envs/nwm
