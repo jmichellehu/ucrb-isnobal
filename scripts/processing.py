@@ -3,6 +3,7 @@
 
 import os
 import sys
+import glob
 from pathlib import PurePath
 import pathlib as p
 
@@ -19,8 +20,30 @@ import pyproj
 
 from s3fs import S3FileSystem, S3Map
 
-sys.path.append('/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/env/')
-import helpers as h
+def fn_list(thisDir, fn_pattern, verbose=False):
+    """Match and sort filenames based on a regex pattern in specified directory
+
+    Parameters
+    -------------
+    thisDir: str
+        directory path to search
+    fn_pattern: str
+        regex pattern to match files
+    verbose: boolean
+        print filenames
+    
+    Returns
+    -------------
+    fns: list
+        list of filenames matched and sorted
+    """
+    fns=[]
+    for f in glob.glob(thisDir + "/" + fn_pattern):
+        fns.append(f)
+    fns.sort()
+    if verbose: print(fns)
+    return fns
+
 
 def get_varnc(basin=None, indir=None, indate=None, templatefn=None, returnvar=None):
     '''
