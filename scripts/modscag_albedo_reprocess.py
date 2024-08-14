@@ -1,18 +1,37 @@
 #!/usr/bin/env python
 
-'''Script to rescale and reset ndv for v2023.0e albedo prodcuts to match v03 standards '''
+'''Script to rescale and reset ndv for v2023.0e albedo products to match v03 standards 
+Usage: modscag_albedo_reprocess.py in_file 
+
+Defaults to modscag_albedo_reprocess.py in_file -o out_file -s 100 -n 255
+with out_file using reprocess_albedo.tif as suffix
+'''
 
 import argparse
 import copy
 import xarray as xr
 import numpy as np
 
-def reset_and_rescale(ds, ndv=None, scale=100, varname='band_data'):
-    ''' Rescale v2023.0e MODSCAG albedo to v03 standards
+def reset_and_rescale(ds: xr.Dataset, ndv: float = None, scale: int = 100, varname: str = 'band_data') -> xr.Dataset:
+    '''Reset the no data values (ndv) in the dataset to 0 and rescale the values to a specified range.
+    Intended to standardize issues found in v2023.0e MODSCAG albedo to v03 standards
     Range: 0-10000
     NDV: 0
-    arr: xarray.core.dataset.Dataset
-    '''
+
+    Parameters:
+    ds: xarray.Dataset
+        The dataset containing the variable to be reset and rescaled.
+    ndv: float or None, optional
+        The no data value to be reset to 0. If None, no ndv will be reset.
+    scale: int, optional
+        The scaling factor to rescale the values. Default is 100.
+    varname: str, optional
+        The name of the variable to be reset and rescaled. Default is 'band_data'.
+
+    Returns:
+    ds_reset: xarray.Dataset
+        The dataset with the variable reset and rescaled.'''
+    
     # Create a deep copy of the array 
     ds_reset = copy.deepcopy(ds)
     # Extract numpy array
