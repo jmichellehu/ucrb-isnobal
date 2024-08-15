@@ -15,6 +15,7 @@ import xarray as xr
 import geopandas as gpd
 from shapely.geometry import Point
 from shapely.ops import unary_union
+import datetime
 
 import pyproj
 
@@ -68,12 +69,12 @@ def get_varnc(basin=None, indir=None, indate=None, templatefn=None, returnvar=No
 
     # or an input directory and specific date    
     elif (indir is not None) & (indate is not None):
-        datedir = h.fn_list(indir, f'*{indate}/')[0]
+        datedir = fn_list(indir, f'*{indate}/')[0]
 
     if returnvar is None:
-        return h.fn_list(datedir, '*nc')
+        return fn_list(datedir, '*nc')
     else:
-        return h.fn_list(datedir, f'{returnvar}.nc')
+        return fn_list(datedir, f'{returnvar}.nc')
     
 def extract_ravel_varvals(ds, varname='thickness'):
     '''Extract variable values from input DataArray.
@@ -181,7 +182,7 @@ def assign_dt(ds, dt):
     ds = ds.expand_dims(time=dt)
     return ds
 
-def calc_sdd(snow_property, verbose=False, snow_name=None):
+def calc_sdd(snow_property, verbose=False, snow_name=None, day_thresh=10):
     '''
     Calculate snow disappearance date from a pandas series of snow depth or SWE.
     
@@ -194,22 +195,56 @@ def calc_sdd(snow_property, verbose=False, snow_name=None):
         tuple: A tuple containing the snow disappearance date and the first derivative of the snow property.
     
     Notes:
-        - This function calculates the first derivative of the snow property.
-        - It determines the last date at which the derivative is nonzero, which represents the snow disappearance date.
-        - This method is not robust to late season blips. See Hoosier Pass (531) and Grizzly Peak (505) for WY 2022 example.
+        - This function calculates the first derivative of the snow property and expects input units of meters.
+        - It determines the last date at which the derivative is nonzero , which represents the snow disappearance date.
+        - This method is robust to a definable threshold (day_thresh), where the preceding sequential days must also have negative derivatives
     
     Modified from https://stackoverflow.com/questions/22000882/find-last-non-zero-elements-index-in-pandas-series
     '''
-
     # Calculate first derivative of snow property
     firstderiv = snow_property.diff() / snow_property.index.to_series().diff().dt.total_seconds()
     
-    # Determine last date at which derivative is nonzero
-    snow_all_gone_date = firstderiv[firstderiv != 0].index[-1]
+    # Get list of dates with negative derivatives (declining snow property)
+    # deriv_dates = firstderiv[firstderiv < -1e-7]
+    deriv_dates = firstderiv[firstderiv < 0]
+
+    # Determine last date at which derivative is robustly negative, starting with the last date in the series
+    snow_all_test_date = deriv_dates.index[-1]
+    counter = 0
+    if verbose: 
+        print(f'Starting snow all gone date: {snow_all_test_date}')
+
+    # Loop through all dates where the first derivative is negative
+    for f in range(-2, -len(deriv_dates), -1):
+        preceding_date = deriv_dates.index[f-1]
+        if verbose:
+            print(snow_all_test_date, preceding_date)
+        
+        # If the preceding date is not the date before, reset the counter,
+        # otherwise increment the counter
+        if snow_all_test_date - preceding_date != datetime.timedelta(days=1):    
+            if verbose: 
+                print('Did not pass test, resetting counter')
+            counter = 0
+        else:
+            counter+=1
+        
+        # Reassign snow_all_test_date to preceding date value
+        snow_all_test_date = preceding_date
+
+        # If the counter exceeds the sequential days threshold, 
+        # break the loop and readjust the index to the now robustly found date
+        if counter >= day_thresh:
+            snow_all_gone_date = deriv_dates.index[f+counter-1]
+            # print(f, counter)
+            if verbose: 
+                print(f'Found snow all gone date: {snow_all_gone_date}')
+            break
+        # print(f'{counter}\n')
     
     if verbose:
         print(f'Snow all gone date {snow_all_gone_date.strftime('%Y-%m-%d')}')
-        print(f'Derivative: {firstderiv.loc[snow_all_gone_date]} m/d')
+        print(f'Derivative: {firstderiv.loc[snow_all_gone_date]*86400} m/d')
         if snow_name is None:
             snow_name = 'Snow property value'
         print(f'{snow_name}: {snow_property.loc[snow_all_gone_date]} m')
