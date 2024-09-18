@@ -1,3 +1,11 @@
+.gitignore
 files/
 *.zip
 *.tar*
+*.ipynb_checkpoints/
+__pycache__
+*/nwm/hydroshare/
+*/*.csv
+*/*/*txt
+pngs/
+*.html
