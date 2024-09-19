@@ -360,50 +360,111 @@ def get_nwm_retrospective_LDAS(site_gdf, start=None, end=None, var='SNOWH'):
     return ds_list
 
 
-def get_snotel_df_pt(jdx=0, sitenums=None, snotel_dir=None, WY=None, outepsg='epsg:32613', verbose=True):
-    '''Extract snotel data for specified water year and snotel site'''
-    sitenum = sitenums.iloc[jdx]
-    # If PoR, download and re-run function
-    if len(fn_list(snotel_dir, f'*site{sitenum}.csv')) == 0:
-        print(f'No record found for {sitenum}, need to download!')
-        print(f'Run: get_snotelPoR_csv.sh {sitenum} from {snotel_dir}')
-        print('Exiting...')
-        return
-    else:
-        snotelfn = fn_list(snotel_dir, f'*site{sitenum}.csv')[0]
-        df = pd.read_csv(snotelfn, skiprows=63, usecols=list(np.arange(0, 7)), parse_dates=["Date"])
-        # Copy date to new date indexing column
-        df['DateIndex'] = df['Date']
-        # reset index as Date
-        df = df.set_index('DateIndex')
-        # Clip to this water year
-        snotel_df = df[(df['Date']>=f'{int(WY) - 1}-10-01') & (df['Date']<f'{WY}-10-01')]
-        # Extract snotel point coords and plot
-        sitenums = [int(sitenum)] 
-        allsites_fn = fn_list(snotel_dir, '*active*csv')[0]
-        sites_df = pd.read_csv(allsites_fn, index_col=0)
-        # Extract the lats and lons based on these site numbers
-        snotellats = []
-        snotellons = []
-        for sitenum in sitenums:
-            # print(sitenum)
-            this_site = sites_df[sites_df['site_num']==sitenum]
-            lat, lon = this_site['lat'].values[0], this_site['lon'].values[0]
-            snotellats.append(lat)
-            snotellons.append(lon)
+# def get_snotel_df_pt(jdx=0, sitenums=None, snotel_dir=None, WY=None, outepsg='epsg:32613', verbose=True):
+#     '''Extract snotel data for specified water year and snotel site'''
+#     sitenum = sitenums.iloc[jdx]
+#     # If PoR, download and re-run function
+#     if len(fn_list(snotel_dir, f'*site{sitenum}.csv')) == 0:
+#         print(f'No record found for {sitenum}, need to download!')
+#         print(f'Run: get_snotelPoR_csv.sh {sitenum} from {snotel_dir}')
+#         print('Exiting...')
+#         return
+#     else:
+#         snotelfn = fn_list(snotel_dir, f'*site{sitenum}.csv')[0]
+#         df = pd.read_csv(snotelfn, skiprows=63, usecols=list(np.arange(0, 7)), parse_dates=["Date"])
+#         # Copy date to new date indexing column
+#         df['DateIndex'] = df['Date']
+#         # reset index as Date
+#         df = df.set_index('DateIndex')
+#         # Clip to this water year
+#         snotel_df = df[(df['Date']>=f'{int(WY) - 1}-10-01') & (df['Date']<f'{WY}-10-01')]
+#         # Extract snotel point coords and plot
+#         sitenums = [int(sitenum)] 
+#         allsites_fn = fn_list(snotel_dir, '*active*csv')[0]
+#         sites_df = pd.read_csv(allsites_fn, index_col=0)
+#         # Extract the lats and lons based on these site numbers
+#         snotellats = []
+#         snotellons = []
+#         for sitenum in sitenums:
+#             # print(sitenum)
+#             this_site = sites_df[sites_df['site_num']==sitenum]
+#             lat, lon = this_site['lat'].values[0], this_site['lon'].values[0]
+#             snotellats.append(lat)
+#             snotellons.append(lon)
 
-        # Convert to UTM EPSG 32613
-        # Create a Geoseries based off of a list of a Shapely point using the lat and lon from the SNOTEL site
-        s = gpd.GeoSeries([Point(lon, lat) for lon, lat in zip(snotellons, snotellats)])
-        # Turn this into a geodataframe and specify the geom as the geoseries of the SNOTEL point
-        gdf = gpd.GeoDataFrame(geometry=s)
-        # Set the CRS inplace
-        gdf.set_crs('epsg:4326', inplace=True)
-        # Convert snotel coords' lat lon to UTM
-        gdf = gdf.to_crs(outepsg)
+#         # Convert to UTM EPSG 32613
+#         # Create a Geoseries based off of a list of a Shapely point using the lat and lon from the SNOTEL site
+#         s = gpd.GeoSeries([Point(lon, lat) for lon, lat in zip(snotellons, snotellats)])
+#         # Turn this into a geodataframe and specify the geom as the geoseries of the SNOTEL point
+#         gdf = gpd.GeoDataFrame(geometry=s)
+#         # Set the CRS inplace
+#         gdf.set_crs('epsg:4326', inplace=True)
+#         # Convert snotel coords' lat lon to UTM
+#         gdf = gdf.to_crs(outepsg)
 
-        # Get sitename
-        sitename = snotel_df.columns[1].split(f' Snow Depth')[0]
-        if verbose:
-            print(f'Retrieved geodataframe of {sitename} SNOTEL site and dataframe for WY {WY}')
-        return snotel_df, gdf, sitenum, sitename
+#         # Get sitename
+#         sitename = snotel_df.columns[1].split(f' Snow Depth')[0]
+#         if verbose:
+#             print(f'Retrieved geodataframe of {sitename} SNOTEL site and dataframe for WY {WY}')
+#         return snotel_df, gdf, sitenum, sitename
+
+    
+def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH'):
+    '''Use metloom to pull snotel coordinates and return as geodataframe and daily data as dict of dataframes
+    valid snow variables: SNOWDEPTH, SWE
+    '''
+    from metloom.pointdata import SnotelPointData
+    import geopandas as gpd
+    from shapely.geometry import Point
+    from datetime import datetime
+    
+    # start and end date
+    start_date = datetime(WY-1, 10, 1)
+    end_date = datetime(WY, 9, 30)
+
+    snotel_dfs = dict()
+    snotellats = []
+    snotellons = []
+    for snotelNUM, snotelNAME, snotelST in zip(sitenum, sitename, ST):
+        snotel_point = SnotelPointData(f"{snotelNUM}:{snotelST}:SNTL", f"{snotelNAME}")
+
+        meta_df = snotel_point.metadata
+        lon, lat = meta_df.x, meta_df.y
+        snotellats.append(lat)
+        snotellons.append(lon)
+        
+        # set up variable list
+        if snowvar == "SNOWDEPTH":
+            variables = [snotel_point.ALLOWED_VARIABLES.SNOWDEPTH]
+        elif snowvar == "SWE":
+            variables = [snotel_point.ALLOWED_VARIABLES.SWE]
+
+        # request the data - use daily, the hourly data is too noisy and messes up SDD calcs
+        df = snotel_point.get_daily_data(start_date, end_date, variables)
+        # df = snotel_point.get_hourly_data(start_date, end_date, variables)
+
+        # Convert to metric here
+        if snowvar == "SNOWDEPTH":
+            df['SNOWDEPTH_m'] = df['SNOWDEPTH'] * 0.0254
+        if snowvar == "SWE":
+            df['SWE_m'] = df['SWE'] * 0.0254
+        
+        # Reset the index 
+        df = df.reset_index().set_index("datetime")
+
+        # Store in dict
+        snotel_dfs[snotelNAME] = df
+    
+    # Create a Geoseries based off of a list of a Shapely point using the lat and lon from the SNOTEL site
+    s = gpd.GeoSeries([Point(lon, lat) for lon, lat in zip(snotellons, snotellats)])
+
+    # Turn this into a geodataframe and specify the geom as the geoseries of the SNOTEL point
+    gdf = gpd.GeoDataFrame(geometry=s)
+
+    # Set the CRS inplace
+    gdf.set_crs('epsg:4326', inplace=True)
+
+    # Convert snotel coords' lat lon to UTM
+    gdf = gdf.to_crs(f'epsg:{epsg}')
+
+    return gdf, snotel_dfs
