@@ -262,7 +262,7 @@ def calc_sdd(snow_property, verbose=False, snow_name=None, day_thresh=10):
         # print(f'{counter}\n')
     
     if verbose:
-        print(f'Snow all gone date {snow_all_gone_date.strftime('%Y-%m-%d')}')
+        print(f'Snow all gone date {snow_all_gone_date.strftime("%Y-%m-%d")}')
         print(f'Derivative: {firstderiv.loc[snow_all_gone_date]*86400} m/d')
         if snow_name is None:
             snow_name = 'Snow property value'
@@ -292,7 +292,7 @@ def calc_peak(snow_property, verbose=False, snow_name=None, units='m'):
     if verbose:
         if snow_name is None:
             snow_name = 'Snow property value'
-        print(f'Peak {snow_name} date: {peak_date.strftime('%Y-%m-%d')}')
+        print(f'Peak {snow_name} date: {peak_date.strftime("%Y-%m-%d")}')
         print(f'Peak {snow_name} value: {max_val} {units}')
     
     return peak_date, max_val
