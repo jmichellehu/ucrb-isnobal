@@ -297,13 +297,14 @@ def calc_peak(snow_property, verbose=False, snow_name=None, units='m'):
     
     return peak_date, max_val
 
-def locate_snotel_in_poly(poly_fn: str, site_locs_fn: str):
+def locate_snotel_in_poly(poly_fn: str, site_locs_fn: str, buffer: int = 0):
     '''
     Extract snotel sites located within a given polygon.
 
     Args:
         poly_fn (str): The filepath of the polygon.
         site_locs_fn (str): The filepath of the snotel sites.
+        buffer (int): The buffer distance to pad the polygon geometry
 
     Returns:
         geopandas.GeoDataFrame: A geodataframe of snotel sites located within the polygon.
@@ -321,6 +322,9 @@ def locate_snotel_in_poly(poly_fn: str, site_locs_fn: str):
         poly_geom = unary_union(poly_gdf.geometry)
     else:        
         poly_geom = poly_gdf.iloc[0].geometry
+    
+    # Buffer this polygon geometry
+    poly_geom = poly_geom.buffer(distance=buffer)
     
     # Check if sites are located within polygon
     idx = sites_gdf.intersects(poly_geom)
