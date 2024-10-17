@@ -5,6 +5,8 @@ Usage: modscag_albedo_reprocess.py in_file
 
 Defaults to modscag_albedo_reprocess.py in_file -o out_file -s 100 -n 255
 with out_file using reprocess_albedo.tif as suffix
+no data value set as NaN
+intended range for albedo is 0 < albedo < 10000
 '''
 
 import argparse
@@ -13,16 +15,16 @@ import xarray as xr
 import numpy as np
 
 def reset_and_rescale(ds: xr.Dataset, ndv: float = None, scale: int = 100, varname: str = 'band_data') -> xr.Dataset:
-    '''Reset the no data values (ndv) in the dataset to 0 and rescale the values to a specified range.
-    Intended to standardize issues found in v2023.0e MODSCAG albedo to v03 standards
+    '''Reset the no data values (ndv) in the dataset to NaN and rescale the values to a specified range.
+    Intended to handle issues found in v2023.0e MODSCAG albedo to adhere to v03 standards
     Range: 0-10000
-    NDV: 0
+    NDV: np.NaN
 
     Parameters:
     ds: xarray.Dataset
         The dataset containing the variable to be reset and rescaled.
     ndv: float or None, optional
-        The no data value to be reset to 0. If None, no ndv will be reset.
+        The no data value to be reset to np.nan. If None, no ndv will be reset.
     scale: int, optional
         The scaling factor to rescale the values. Default is 100.
     varname: str, optional
@@ -36,10 +38,9 @@ def reset_and_rescale(ds: xr.Dataset, ndv: float = None, scale: int = 100, varna
     ds_reset = copy.deepcopy(ds)
     # Extract numpy array
     arr = ds_reset[varname].data
-    # Reset ndv to 0
-    arr[np.isnan(arr)] = 0
+    # Reassign/reset no data values to NaNs
     if ndv is not None:
-        arr[arr==ndv] = 0
+        arr[arr==ndv] = np.nan
     # Rescale to 0-10000 and assign to the dataset
     ds_reset[varname].data = arr * scale
     return ds_reset
