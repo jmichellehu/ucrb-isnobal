@@ -1,14 +1,14 @@
 #!/usr/bin/env python
-
-import pyproj
 import os
 import sys
-sys.path.append('/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/ucrb-isnobal/scripts/')
-import processing as proc
+import glob
+
 import argparse
 import pandas as pd
-import glob
 from typing import List
+
+sys.path.append('/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/ucrb-isnobal/scripts/')
+import processing as proc
 
 def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
     """Match and sort filenames based on a regex pattern in specified directory
@@ -27,11 +27,12 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
     fns: list
         list of filenames matched and sorted
     """
-    fns=[]
+    fns = []
     for f in glob.glob(thisDir + "/" + fn_pattern):
         fns.append(f)
     fns.sort()
-    if verbose: print(fns)
+    if verbose: 
+        print(fns)
     return fns
 
 def parse_arguments():
@@ -54,6 +55,10 @@ def parse_arguments():
         return parser.parse_args()
 
 def __main__():
+    # NWM proj4 string
+    proj4 = '+proj=lcc +lat_0=40 +lon_0=-97 +lat_1=30 +lat_2=60 +x_0=0 +y_0=0 +R=6370000 +units=m +no_defs'
+    ancillarydir = '/uufs/chpc.utah.edu/common/home/skiles-group3/ancillary_sdswe_products'
+    
     args = parse_arguments()
     verbose = args.verbose
     basin = args.basin
@@ -61,14 +66,6 @@ def __main__():
     poly_fn = args.shapefile
     site_json = args.site_locs
     outname = args.out_path
-
-    # NWM proj4 string
-    proj4 = '+proj=lcc +lat_0=40 +lon_0=-97 +lat_1=30 +lat_2=60 +x_0=0 +y_0=0 +R=6370000 +units=m +no_defs'
-    epsg = 'epsg:32613'
-    
-    # for NWM env
-    pyprojdatadir = '/uufs/chpc.utah.edu/common/home/u6058223/software/pkg/miniconda3/pkgs/proj-9.4.1-hb784bbd_0/share/proj'
-    pyproj.datadir.set_data_dir(pyprojdatadir)
 
     if poly_fn is None:
         poly_dir = '/uufs/chpc.utah.edu/common/home/skiles-group1/jmhu/ancillary/polys'
