@@ -49,9 +49,9 @@ def parse_arguments():
         parser.add_argument('wy', type=int, help='Water year of interest')
         parser.add_argument('-shp', '--shapefile', type=str, help='Shapefile of basin polygon', default=None)
         parser.add_argument('-loc', '--sitelocs', type=str, help='json file of point locations', 
-                            default='/uufs/chpc.utah.edu/common/home/skiles-group3/SNOTEL/snotel_sites_32613.json')
+                            default='SNOTEL/snotel_sites_32613.json')
         parser.add_argument('-o', '--out_path', type=str, help='Output path', default=None)
-        parser.add_argument('-v', '--verbose', action='store_true', help='Print filenames', default=False)
+        parser.add_argument('-v', '--verbose', action='store_true', help='Print filenames')
         return parser.parse_args()
 
 def __main__():
@@ -64,39 +64,48 @@ def __main__():
     basin = args.basin
     wy = args.wy
     poly_fn = args.shapefile
-    site_json = args.site_locs
+    allsites_fn = f'{ancillarydir}/{args.sitelocs}'
     outname = args.out_path
 
     if poly_fn is None:
         poly_dir = '/uufs/chpc.utah.edu/common/home/skiles-group1/jmhu/ancillary/polys'
         poly_fn = fn_list(poly_dir, f'*{basin}*shp')[0]
+    
+    # Locate SNOTEL sites within basin using metloom
+    found_sites = proc.locate_snotel_in_poly(poly_fn=poly_fn, site_locs_fn=allsites_fn, buffer=200)
 
-    site_gdf = proc.locate_snotel_in_poly(poly_fn, site_json)
+    # Get site names and site numbers
+    sitenames = found_sites['site_name']
+    sitenums = found_sites['site_num']
+    print(sitenames)
+
+    ST_arr = ['CO'] * len(sitenums)
+    gdf_metloom, _ = proc.get_snotel(sitenums, sitenames, ST_arr, WY=wy)
+
+    # Change the crs of the snotel gdf to the NWM crs
+    gdf_metloom_nwm = gdf_metloom.to_crs(crs=proj4)
     if verbose:
-        print(f'Located {len(site_gdf)} SNOTEL sites in {basin}')
+        print(gdf_metloom_nwm.crs)
 
-    # Change the crs of the site_gdf to the NWM crs
-    site_gdf.set_crs(epsg, inplace=True, allow_override=True)
-    site_gdf = site_gdf.to_crs(crs=proj4)
-    if verbose:
-        print(site_gdf.crs)
-
-    basin_nwm_ds = proc.get_nwm_retrospective_LDAS(site_gdf, start=f'{wy-1}-10-01', end=f'{wy}-09-30', var='SNOWH')
+    basin_nwm_ds = proc.get_nwm_retrospective_LDAS(gdf_metloom_nwm, 
+                                                   start=f'{wy-1}-10-01', 
+                                                   end=f'{wy}-09-30', 
+                                                   var='SNOWH')
 
     # Turn it into a dict
     nwm_snowh_dict = dict()
     for jdx, ds in enumerate(basin_nwm_ds):
-        nwm_snowh_dict[site_gdf['site_name'].values[jdx]] = ds.values
+        nwm_snowh_dict[sitenames.values[jdx]] = ds.values
 
     # Turn it into a dataframe
     df = pd.DataFrame(nwm_snowh_dict, index=ds['time'].values)
 
     # Save the the dataframe as csv for easy access later
     if outname is None:
-        nwm_basin_dir = f'/uufs/chpc.utah.edu/common/home/skiles-group3/NWM/{basin}'
+        nwm_basin_dir = f'{ancillarydir}/NWM/{basin}'
         if not os.path.exists(nwm_basin_dir):
             os.makedirs(nwm_basin_dir)
-        outname = f'{nwm_basin_dir}/{basin}_nwm_snotel_SNOWH_wy{wy}.csv'
+        outname = f'{nwm_basin_dir}/{basin}_nwm_snotelmetloom_SNOWH_wy{wy}.csv'
 
     df.to_csv(outname)
     if verbose:
