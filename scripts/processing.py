@@ -40,7 +40,7 @@ month_dict = {
     'Dec': 12,
 }
 
-def fn_list(thisDir, fn_pattern, verbose=False):
+def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
     """Match and sort filenames based on a regex pattern in specified directory
 
     Parameters
@@ -57,13 +57,13 @@ def fn_list(thisDir, fn_pattern, verbose=False):
     fns: list
         list of filenames matched and sorted
     """
-    fns=[]
+    fns = []
     for f in glob.glob(thisDir + "/" + fn_pattern):
         fns.append(f)
     fns.sort()
-    if verbose: print(fns)
+    if verbose:
+        print(fns)
     return fns
-
 
 def get_varnc(basin=None, indir=None, indate=None, templatefn=None, returnvar=None):
     '''
@@ -82,11 +82,11 @@ def get_varnc(basin=None, indir=None, indate=None, templatefn=None, returnvar=No
     TODO:maybe remove basin and add returnvar handling for an input list
     '''
         
-    # first check if you are looking for specific date based on template fn    
+    # first check if you are looking for specific date based on template fn
     if templatefn is not None:
         datedir = p.PurePath(templatefn).parent.as_posix()
 
-    # or an input directory and specific date    
+    # or an input directory and specific date
     elif (indir is not None) & (indate is not None):
         datedir = fn_list(indir, f'*{indate}/')[0]
 
@@ -115,7 +115,7 @@ def extract_boxplot_vals(rav_arr):
     rav_arr (numpy.ndarray): The input array from which the statistics will be extracted.
 
     Returns:
-    tuple: A tuple containing the following values in order: 
+    tuple: A tuple containing the following values in order:
         - lowwhisk (float): The lower whisker threshold for outliers.
         - p25 (float): The 25th percentile value.
         - p50 (float): The 50th percentile value (median).
@@ -159,7 +159,7 @@ def extract_dt(fn, inputvar="_snowdepth"):
     
     Args:
         fn (str): The filename from which to extract the date.
-        inputvar (str, optional): The input variable to use for extraction. 
+        inputvar (str, optional): The input variable to use for extraction.
                                     Defaults to "_snowdepth". Change inputvar to '_swe' if using SWE files.
     
     Returns:
@@ -172,16 +172,16 @@ def extract_dt(fn, inputvar="_snowdepth"):
     try:
         month = int(dt_file[4:-2])
     except:
-        # newer collection, potentially collected over multiple days, 
+        # newer collection, potentially collected over multiple days,
         # access via 3 alpha code using month_dict
         month = month_dict[dt_file[4:-2][:3]]
     day = int(dt_file[-2:])
     # Create a dataframe from the parsed dates
-    df = pd.DataFrame(columns=['Year', 'Month', 'Day'], 
+    df = pd.DataFrame(columns=['Year', 'Month', 'Day'],
                       data=np.expand_dims(np.array([year, month, day]), 1).T)
     
     if df.Month.dtype != 'int64':
-        # Create dictionary of month abbreviations with associated numeric 
+        # Create dictionary of month abbreviations with associated numeric
         # from https://stackoverflow.com/questions/42684530/convert-a-column-in-a-python-pandas-from-string-month-into-int
         d = dict(zip(pd.date_range('2000-01-01', freq='ME', periods=12).strftime('%b'), range(1,13)))
             
@@ -323,7 +323,7 @@ def locate_snotel_in_poly(poly_fn: str, site_locs_fn: str, buffer: int = 0):
     # Merge geometries if multipart polygon
     if len(poly_gdf.geometry) > 1:
         poly_geom = unary_union(poly_gdf.geometry)
-    else:        
+    else:
         poly_geom = poly_gdf.iloc[0].geometry
     
     # Buffer this polygon geometry
@@ -386,7 +386,7 @@ def get_nwm_retrospective_LDAS(site_gdf, start=None, end=None, var='SNOWH'):
 #         # Clip to this water year
 #         snotel_df = df[(df['Date']>=f'{int(WY) - 1}-10-01') & (df['Date']<f'{WY}-10-01')]
 #         # Extract snotel point coords and plot
-#         sitenums = [int(sitenum)] 
+#         sitenums = [int(sitenum)]
 #         allsites_fn = fn_list(snotel_dir, '*active*csv')[0]
 #         sites_df = pd.read_csv(allsites_fn, index_col=0)
 #         # Extract the lats and lons based on these site numbers
@@ -451,7 +451,7 @@ def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH'):
         if snowvar == "SWE":
             df['SWE_m'] = df['SWE'] * 0.0254
         
-        # Reset the index 
+        # Reset the index
         df = df.reset_index().set_index("datetime")
 
         # Store in dict
