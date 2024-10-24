@@ -492,3 +492,94 @@ def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH'):
     gdf = gdf.to_crs(f'epsg:{epsg}')
 
     return gdf, snotel_dfs
+
+def bin_elev(dem, basinname, p=10, verbose=False, plot_on=True,
+             cmap='viridis', figsize=(4, 6), title='elevation binned'
+            ):
+    """Bin elevation based on p percent bin width"""
+    #TODO Add standard deviation/other measure of spread around the mean
+    #TODO Add day range of means - e.g., north vs. south
+
+    title = f'{basinname} {title}'
+    # Bin elevation
+    dem_bin = copy.deepcopy(dem)
+    # Extract numpy array from dataset to do reassignment
+    dem_bin_arr = dem_bin.data
+    # contains minimum inclusive value of percentile range
+    dem_elev_ranges = dict()
+    for r in range(int(100 / p)):
+        # Get percentile range
+        prange = (r * p, (r+1) * p)
+        dem_elev_range = (int(np.nanpercentile(dem, prange[0])),
+                          int(np.nanpercentile(dem, prange[1])))
+        if verbose:
+            print(f'Percentile range: {prange} | elev {dem_elev_range}')
+
+        dem_elev_ranges[f'{r * p}_{(r+1) * p}'] = dem_elev_range
+        conditions = (dem_bin_arr > dem_elev_range[0]) & (dem_bin_arr <= dem_elev_range[1])
+        dem_bin_arr[conditions] = r + 1
+        if r == int(100 / p) - 1:
+            dem_bin_arr[(dem_bin_arr >= dem_elev_range[1])] = r + 2
+
+    # Reassign array to dataset
+    dem_bin.data = dem_bin_arr
+
+    # Plot new classes
+    if plot_on:
+        h.plot_one(dem_bin, cmap=cmap, title=title, figsize=figsize)
+
+    return dem_bin, dem_elev_ranges
+
+def bin_slope(slope, basinname, plot_on=True,
+             cmap='viridis', figsize=(4, 6), title='slope binned'
+            ):
+    """Bin input slope array based on pre-determined classes"""
+    title = f'{basinname} {title}'
+    # Bin slope
+    slope_bin = copy.deepcopy(slope)
+
+    # Extract numpy array from dataset to do reassignment
+    slope_bin_arr = slope_bin.data
+    slope_bin_arr[(slope_bin_arr>=0) & (slope_bin_arr<=10)] = 1 # Flat
+    slope_bin_arr[(slope_bin_arr>10) & (slope_bin_arr<=20)] = 2 # Low slopes
+    slope_bin_arr[(slope_bin_arr>20) & (slope_bin_arr<=30)] = 3 # Moderate slopes
+    slope_bin_arr[(slope_bin_arr>30) & (slope_bin_arr<=40)] = 4 # High slopes
+    slope_bin_arr[(slope_bin_arr>40) & (slope_bin_arr<=50)] = 5 # Steep slopes
+    slope_bin_arr[(slope_bin_arr>50) & (slope_bin_arr<=60)] = 6 # V steep
+    slope_bin_arr[(slope_bin_arr>60)] = 7 # Snow does not accumulate in substantial quantities
+
+    # Reassign array to dataset
+    slope_bin.data = slope_bin_arr
+
+    # Plot new classes
+    if plot_on:
+        h.plot_one(slope_bin, cmap=cmap, title=title, figsize=figsize)
+
+    return slope_bin
+
+def bin_aspect(aspect, basinname, compass_rose = ['North', 'East', 'South', 'West'],
+               plot_on=True, cmap='plasma_r', figsize=(4, 6), title=f'aspect binned'):
+    """Bin input aspect array based on pre-determined classes
+    """
+    #TODO Add standard deviation/other measure of spread around the mean
+    # TODO Add day range of means - e.g., north vs. south
+    title = f'{basinname} {title}'
+
+    # Bin aspect
+    aspect_crop_rosebin = copy.deepcopy(aspect)
+
+    # Extract numpy array from dataset to do reassignment
+    aspect_crop_rosebin_arr = aspect_crop_rosebin.data
+    aspect_crop_rosebin_arr[(aspect_crop_rosebin_arr>315) | (aspect_crop_rosebin_arr<=45)] = 1 # North
+    aspect_crop_rosebin_arr[(aspect_crop_rosebin_arr>45) & (aspect_crop_rosebin_arr<=135)] = 2 # East
+    aspect_crop_rosebin_arr[(aspect_crop_rosebin_arr>135) & (aspect_crop_rosebin_arr<=225)] = 3 # South
+    aspect_crop_rosebin_arr[(aspect_crop_rosebin_arr>225) & (aspect_crop_rosebin_arr<=315)] = 4 # West
+
+    # Reassign array to dataset
+    aspect_crop_rosebin.data = aspect_crop_rosebin_arr
+
+    # Plot new classes
+    if plot_on:
+        h.plot_one(aspect_crop_rosebin, cmap=cmap, figsize=figsize, title=title)
+
+    return aspect_crop_rosebin
