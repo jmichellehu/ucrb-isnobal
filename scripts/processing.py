@@ -226,43 +226,47 @@ def calc_sdd(snow_property, verbose=False, snow_name=None, day_thresh=10):
     '''
     # Calculate first derivative of snow property
     firstderiv = snow_property.diff() / snow_property.index.to_series().diff().dt.total_seconds()
-    # Get list of dates with negative derivatives (declining snow property)
-    # deriv_dates = firstderiv[firstderiv < -1e-7]
-    deriv_dates = firstderiv[firstderiv < 0]
 
-    # Determine last date at which derivative is robustly negative, starting with the last date in the series
-    snow_all_test_date = deriv_dates.index[-1]
-    counter = 0
-    if verbose: 
-        print(f'Starting snow all gone date: {snow_all_test_date}')
+    try:
+        # Get list of dates with negative derivatives (declining snow property)
+        # deriv_dates = firstderiv[firstderiv < -1e-7]
+        deriv_dates = firstderiv[firstderiv < 0]
 
-    # Loop through all dates where the first derivative is negative
-    for f in range(-2, -len(deriv_dates), -1):
-        preceding_date = deriv_dates.index[f-1]
+        # Determine last date at which derivative is robustly negative, starting with the last date in the series
+        snow_all_test_date = deriv_dates.index[-1]
+        counter = 0
         if verbose:
-            print(snow_all_test_date, preceding_date)
-        
-        # If the preceding date is not the date before, reset the counter,
-        # otherwise increment the counter
-        if snow_all_test_date - preceding_date != datetime.timedelta(days=1):    
-            if verbose: 
-                print('Did not pass test, resetting counter')
-            counter = 0
-        else:
-            counter+=1
-        
-        # Reassign snow_all_test_date to preceding date value
-        snow_all_test_date = preceding_date
+            print(f'Starting snow all gone date: {snow_all_test_date}')
 
-        # If the counter exceeds the sequential days threshold, 
-        # break the loop and readjust the index to the now robustly found date
-        if counter >= day_thresh:
-            snow_all_gone_date = deriv_dates.index[f+counter-1]
-            # print(f, counter)
-            if verbose: 
-                print(f'Found snow all gone date: {snow_all_gone_date}')
-            break
-        # print(f'{counter}\n')
+        # Loop through all dates where the first derivative is negative
+        for f in range(-2, -len(deriv_dates), -1):
+            preceding_date = deriv_dates.index[f-1]
+            if verbose:
+                print(snow_all_test_date, preceding_date)
+
+            # If the preceding date is not the date before, reset the counter,
+            # otherwise increment the counter
+            if snow_all_test_date - preceding_date != datetime.timedelta(days=1):
+                if verbose:
+                    print('Did not pass test, resetting counter')
+                counter = 0
+            else:
+                counter+=1
+
+            # Reassign snow_all_test_date to preceding date value
+            snow_all_test_date = preceding_date
+
+            # If the counter exceeds the sequential days threshold,
+            # break the loop and readjust the index to the now robustly found date
+            if counter >= day_thresh:
+                snow_all_gone_date = deriv_dates.index[f+counter-1]
+                # print(f, counter)
+                if verbose:
+                    print(f'Found snow all gone date: {snow_all_gone_date}')
+                break
+            # print(f'{counter}\n')
+    except:
+        snow_all_gone_date = firstderiv[firstderiv != 0].index[-1]
     
     if verbose:
         print(f'Snow all gone date {snow_all_gone_date.strftime("%Y-%m-%d")}')
