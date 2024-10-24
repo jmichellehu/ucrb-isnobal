@@ -277,6 +277,24 @@ def calc_sdd(snow_property, verbose=False, snow_name=None, day_thresh=10):
     
     return snow_all_gone_date, firstderiv
 
+def calc_doydiff(sdd_date_ds_list, varname='sdd_doy', xmas=359, ndv=-9999):
+    '''Calculate day difference of input list of SDD DOY datasets.
+    Masks pre-set christmas (12/25) stand-in pixels as ndv
+    '''
+    # Calculate SDD difference DataArray
+    sdd_diff = sdd_date_ds_list[1][varname] - sdd_date_ds_list[0][varname]
+
+    # NaN the Xmas days
+    for sdd_date_ds in sdd_date_ds_list:
+        sdd_diff.values[sdd_date_ds[varname]==xmas] = ndv
+
+    # mask out xmas
+    sdd_diff_arr = sdd_diff.values
+    sdd_diff_arr = np.ma.masked_equal(sdd_diff_arr, ndv)
+    sdd_diff.values = sdd_diff_arr
+
+    return sdd_diff
+
 def calc_peak(snow_property, verbose=False, snow_name=None, units='m'):
     '''
     Finds the date of the maximum snow value from a pandas series of snow depth or SWE.
