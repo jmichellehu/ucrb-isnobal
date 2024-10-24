@@ -1,26 +1,29 @@
 # Helper functions for working with isnobal outputs, ASO data products, and SNOTEL files
 # TODO - need to organize
-
-import os
 import sys
 import glob
-from pathlib import PurePath
-import pathlib as p
 
+import pathlib as p
+from pathlib import PurePath
+import copy
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+
+import datetime
+from datetime import datetime
 
 import xarray as xr
 import geopandas as gpd
-from shapely.geometry import Point
 from shapely.ops import unary_union
-import datetime
 
-import pyproj
-
+from shapely.geometry import Point
 from s3fs import S3FileSystem, S3Map
+from typing import List
 
+from metloom.pointdata import SnotelPointData
+
+sys.path.append('/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/env/')
+import helpers as h
 
 month_dict = {
     'Jan': 1,
@@ -417,11 +420,6 @@ def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH'):
     '''Use metloom to pull snotel coordinates and return as geodataframe and daily data as dict of dataframes
     valid snow variables: SNOWDEPTH, SWE
     '''
-    from metloom.pointdata import SnotelPointData
-    import geopandas as gpd
-    from shapely.geometry import Point
-    from datetime import datetime
-    
     # start and end date
     start_date = datetime(WY-1, 10, 1)
     end_date = datetime(WY, 9, 30)
