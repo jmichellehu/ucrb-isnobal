@@ -4,10 +4,8 @@
 
 Usage: calc_basin_sdd.py basin_name 
 
-# Defaults to modscag_albedo_reprocess.py in_file -o out_file -s 100 -n 255
-# with out_file using reprocess_albedo.tif as suffix
-# no data value set as NaN
-# intended range for albedo is 0 < albedo < 10000
+# Defaults to calc_basin_sdd.py basin_name -t 10 <first water year detected, if multiple> <verbose>
+# TODO add WY input, verbose flag as args
 '''
 
 import sys
@@ -55,7 +53,6 @@ def get_dirs_filenames(basin, varfile='snow.nc', verbose=True,
                            workdir='/uufs/chpc.utah.edu/common/home/skiles-group3/model_runs/'):
     '''Find basin directories, water year and list of daily snow.nc files for each model run'''
     basindirs = fn_list(workdir, f'{basin}*/*/*/')
-    wydir = PurePath(basindirs[0]).parents[0].as_posix()
     if verbose: 
         [print(b) for b in basindirs]
 
@@ -63,7 +60,11 @@ def get_dirs_filenames(basin, varfile='snow.nc', verbose=True,
     WY = int(PurePath(basindirs[0]).parents[0].stem.split('wy')[-1])
     if verbose:
         print(WY)
-
+    # Update basindirs for the selected water year
+    basindirs = fn_list(workdir, f'{basin}*/*{WY}/{basin}*/')
+    wydir = PurePath(basindirs[0]).parents[0].as_posix()
+    if verbose:
+        [print(b) for b in basindirs]
     # list all the daily snow.nc files for a water year for each treatment
     nc_lists = [fn_list(basindir, f'*/{varfile}') for basindir in basindirs]
     if verbose: 
@@ -150,7 +151,7 @@ def calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh, verbose=True
                                                 description='snow disappearance day of year for each pixel in the domain')
 
             # write this out
-            sdd_date_ds.to_netcdf(f'{wydir}/{PurePath(basindir).stem}_sdd_daythresh{day_thresh}.nc')
+            sdd_date_ds.to_netcdf(f'{wydir}/{PurePath(basindir).stem}_sdd_daythresh{day_thresh}_WY{wy}.nc')
         
         return missing_sdd_dict
 
@@ -174,7 +175,7 @@ def __main__():
     missing_sdd_dict = calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh)
     
     # Dump missing snow disappearance date dictionary to json file
-    with open(f'{wydir}/missing_sdd_dict_daythresh{day_thresh}.json', 'w') as fp:
+    with open(f'{wydir}/missing_sdd_dict_daythresh{day_thresh}_WY{wy}.json', 'w') as fp:
         json.dump(missing_sdd_dict, fp)
 
 if __name__ == "__main__":
