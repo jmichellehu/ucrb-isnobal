@@ -71,7 +71,7 @@ def get_dirs_filenames(basin, varfile='snow.nc', verbose=True, res=100,
     # list all the daily snow.nc files for a water year for each treatment
     nc_lists = [fn_list(basindir, f'*/{varfile}') for basindir in basindirs]
     if verbose: 
-        print(len(nc_lists))
+        _ = [print(len(f)) for f in nc_lists]
 
     return basindirs, wydir, WY, nc_lists
 
