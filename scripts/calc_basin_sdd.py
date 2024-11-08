@@ -21,6 +21,8 @@ from pathlib import PurePath
 import copy
 import json 
 
+from tqdm import tqdm
+
 sys.path.append('/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/ucrb-isnobal/scripts/')
 import processing as proc
 
@@ -107,8 +109,8 @@ def calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh, verbose=True
             missing_list = []
 
             # fill the array with the sdd value if calculable
-            for i in range(ds.x.size):
-                for j in range(ds.y.size):
+            for i in tqdm(range(sdd_ds.x.size)):
+                for j in range(sdd_ds.y.size):
                     try:
                         sdd, _ = proc.calc_sdd(ds[:,j,i].to_series(), day_thresh=day_thresh)
                     except Exception as e:
