@@ -51,10 +51,10 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
          print(fns)
     return fns
 
-def get_dirs_filenames(basin, varfile='snow.nc', verbose=True, 
+def get_dirs_filenames(basin, varfile='snow.nc', verbose=True, res=100,
                            workdir='/uufs/chpc.utah.edu/common/home/skiles-group3/model_runs/'):
     '''Find basin directories, water year and list of daily snow.nc files for each model run'''
-    basindirs = fn_list(workdir, f'{basin}*/*/*/')
+    basindirs = fn_list(workdir, f'{basin}*/*/{basin}*{res}*/')
     if verbose: 
         [print(b) for b in basindirs]
 
@@ -62,8 +62,9 @@ def get_dirs_filenames(basin, varfile='snow.nc', verbose=True,
     WY = int(PurePath(basindirs[0]).parents[0].stem.split('wy')[-1])
     if verbose:
         print(WY)
+
     # Update basindirs for the selected water year
-    basindirs = fn_list(workdir, f'{basin}*/*{WY}/{basin}*/')
+    basindirs = fn_list(workdir, f'{basin}*/*{WY}/{basin}*{res}*/')
     wydir = PurePath(basindirs[0]).parents[0].as_posix()
     if verbose:
         [print(b) for b in basindirs]
@@ -108,6 +109,7 @@ def calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh, verbose=True
             # Create and empty list for keeping track of missing sdd pixels
             missing_list = []
 
+            print('Begin looping...')
             # fill the array with the sdd value if calculable
             for i in tqdm(range(sdd_ds.x.size)):
                 for j in range(sdd_ds.y.size):
@@ -123,6 +125,7 @@ def calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh, verbose=True
 
                     sdd_arr[j, i] = sdd.timestamp()
 
+            print('Storing missing list in dict')
             # enter the missing_list into a dict using the basindir stems as keys
             missing_sdd_dict[PurePath(basindirs[0]).stem] = missing_list
 
@@ -137,8 +140,10 @@ def calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh, verbose=True
             sdd_date_ds = sdd_ds.to_dataset()
             # Convert to datetime to access .dt.dayofyear for DOY calc
             # Needs to be in seconds, put up with nanosecond precision warning
+            print('Converting SDD type to datetime64')
             sdd_date_ds['sdd'] = sdd_date_ds['sdd'].astype('datetime64[s]')
 
+            print('Calculating DOY')
             # Calculate Day of year
             sdd_date_ds['sdd_doy'] = sdd_date_ds['sdd'].dt.dayofyear
 
@@ -152,8 +157,10 @@ def calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh, verbose=True
             sdd_date_ds['sdd_doy'].attrs = dict(units='day of year', 
                                                 description='snow disappearance day of year for each pixel in the domain')
 
+            outname = f'{wydir}/{PurePath(basindir).stem}_sdd_daythresh{ending}.nc'
+            print(f'Writing out netcdf...\n{outname}')
             # write this out
-            sdd_date_ds.to_netcdf(f'{wydir}/{PurePath(basindir).stem}_sdd_daythresh{day_thresh}_WY{wy}.nc')
+            sdd_date_ds.to_netcdf(f'{outname}')
         
         return missing_sdd_dict
 
@@ -167,15 +174,20 @@ def __main__():
     basin = args.basin
     day_thresh = args.day_thresh
     
+    print('Getting dirs_filenames')
     # Extract the basin directories, water year and list of daily snow.nc files for each model run
     basindirs, wydir, wy, nc_lists = get_dirs_filenames(basin, verbose=True)
     
+    print('Load snow data')
     # Load the snow data
     ds_concat_list = load_snowdata(nc_lists, verbose=True)
 
+    print('Calculate SDD')
+    ending = f'WY{wy}'
     # Calculate the per-pixel snow disappearance date
     missing_sdd_dict = calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh)
     
+    print('Write out to json')
     # Dump missing snow disappearance date dictionary to json file
     with open(f'{wydir}/missing_sdd_dict_daythresh{day_thresh}_WY{wy}.json', 'w') as fp:
         json.dump(missing_sdd_dict, fp)
