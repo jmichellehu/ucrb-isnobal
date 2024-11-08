@@ -96,8 +96,8 @@ def load_snowdata(nc_lists, chunks='auto',
         ds_concat_list = [ds.load() for ds in ds_concat_list]
         return ds_concat_list
     
-def calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh, verbose=True):
-        '''Calculate snow disappearance date and day of year using processing.py calc_sdd() func and input day_thresh.
+def calculate_sdd(basindirs, ending, wydir, wy, ds_concat_list, verbose=True):
+        '''Calculate snow disappearance date and day of year using processing.py calc_sdd() func.
         Generate dictionary of missing snow disappearance dates and pixel indices with basin model run type as dict key.'''
         missing_sdd_dict = dict()
         for basindir, ds in zip(basindirs, ds_concat_list):
@@ -114,9 +114,9 @@ def calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh, verbose=True
             for i in tqdm(range(sdd_ds.x.size)):
                 for j in range(sdd_ds.y.size):
                     try:
-                        sdd, _ = proc.calc_sdd(ds[:,j,i].to_series(), day_thresh=day_thresh)
+                        sdd, _ = proc.calc_sdd(ds[:,j,i].to_series(), verbose=verbose)
                     except Exception as e:
-                        e.add_note(f"Something wrong with SDD extract for {i, j} at day_thresh of {day_thresh}")
+                        e.add_note(f"Something wrong with SDD extract for {i, j}")
                         # store the pixel where sdd extraction is an issue
                         missing_list.append((i, j))
 
@@ -168,11 +168,8 @@ def __main__():
     # Parse command line args
     parser = argparse.ArgumentParser(description='Basin-wide snow disappearance calculation')
     parser.add_argument('basin', type=str, help='name of basin')
-    parser.add_argument('-t', '--day_thresh', type=str, help='Threshold of days \
-                        to calculate snow disappearance. Default is 2 days', default=2)
     args = parser.parse_args()
     basin = args.basin
-    day_thresh = args.day_thresh
     
     print('Getting dirs_filenames')
     # Extract the basin directories, water year and list of daily snow.nc files for each model run
@@ -185,11 +182,11 @@ def __main__():
     print('Calculate SDD')
     ending = f'WY{wy}'
     # Calculate the per-pixel snow disappearance date
-    missing_sdd_dict = calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh)
+    missing_sdd_dict = calculate_sdd(basindirs, ending, wydir, wy, ds_concat_list)
     
     print('Write out to json')
     # Dump missing snow disappearance date dictionary to json file
-    with open(f'{wydir}/missing_sdd_dict_daythresh{day_thresh}_WY{wy}.json', 'w') as fp:
+    with open(f'{wydir}/missing_sdd_dict_daythresh{ending}.json', 'w') as fp:
         json.dump(missing_sdd_dict, fp)
 
 if __name__ == "__main__":
