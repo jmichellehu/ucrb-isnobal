@@ -8,9 +8,7 @@ from pathlib import PurePath
 import copy
 import numpy as np
 import pandas as pd
-
 import datetime
-from datetime import datetime
 
 import xarray as xr
 import geopandas as gpd
@@ -205,76 +203,85 @@ def assign_dt(ds, dt):
     ds = ds.expand_dims(time=dt)
     return ds
 
-def calc_sdd(snow_property, verbose=False, snow_name=None, day_thresh=10):
+def calc_sdd(snow_property: pd.Series, alg: str = "threshold", day_thresh: int = 10, verbose: bool = False):
     '''
-    Calculate snow disappearance date from a pandas series of snow depth or SWE.
+    Calculate snow disappearance date from a pandas series of a snow property (snow depth or SWE).
+    The snow disappearance date is represented by the last date at which the first derivative is nonzero.
+    The "threshold" method ignores spurious late season events defined by occasions when the snow property
+    is zero within a definable threshold (day_thresh) of preceding days.
     
-    Args:
-        snow_property (pandas.Series): A pandas series of snow depth or SWE (measurement units in meters).
-        verbose (bool, optional): If True, print additional information. Defaults to False.
-        snow_name (str, optional): Name of the snow property. Defaults to None.
+    Parameters
+    -------------
+    snow_property: pandas.Series
+        snow depth or SWE (measurement units in meters)
+    alg: str
+        algorithm to use for snow all gone date calculation
+        - "first": first date where snow property hits zero after the maximum value
+        - "last": last date where snow property hits zero after the maximum value
+        - "threshold": last date where the first derivative of snow property is negative for a definable threshold
+    day_thresh: int
+        - number of lookback days to consider for the threshold algorithm, defaults to 10
+    verbose: boolean
+        print additional information, defaults to False
     
-    Returns:
-        tuple: A tuple containing the snow disappearance date and the first derivative of the snow property.
-    
-    Notes:
-        - This function calculates the first derivative of the snow property and expects input units of meters.
-        - It determines the last date at which the derivative is nonzero , which represents the snow disappearance date.
-        - This method is robust to a definable threshold (day_thresh), where the preceding sequential days must also have negative derivatives
-    
-    Modified from https://stackoverflow.com/questions/22000882/find-last-non-zero-elements-index-in-pandas-series
+    Returns
+    -------------
+        snow_all_gone_date: pd.Timestamp
+            date at which the snow property disappears
+        firstderiv: pd.Series
+            first derivative of the snow property
     '''
     # Calculate first derivative of snow property
     firstderiv = snow_property.diff() / snow_property.index.to_series().diff().dt.total_seconds()
 
-    try:
-        # Get list of dates with negative derivatives (declining snow property)
-        # deriv_dates = firstderiv[firstderiv < -1e-7]
-        deriv_dates = firstderiv[firstderiv < 0]
+    # Get list of dates with negative derivatives (declining snow property)
+    deriv_dates = firstderiv[firstderiv < 0]
 
-        # Determine last date at which derivative is robustly negative, starting with the last date in the series
-        snow_all_test_date = deriv_dates.index[-1]
-        counter = 0
+    # Determine last date at which derivative is negative
+    current_SDD = deriv_dates.index[-1] + pd.Timedelta(days=1)
+
+    # Based on algorithm, determine snow all gone date
+    if verbose:
+        print(f'Algorithm: {alg}')
+
+    if alg == "first":
+        # Pull index of maximum value
+        max_depth_date = snow_property.idxmax()
         if verbose:
-            print(f'Starting snow all gone date: {snow_all_test_date}')
-
-        # Loop through all dates where the first derivative is negative
+            print(f"Max depth date: {max_depth_date}")
+            print(f"Max depth is: {snow_property.loc[max_depth_date]}")
+        # Pull index of minimum value after max depth date
+        # idxmin pulls the first value (date) if multiple meet the condition
+        snow_all_gone_date = snow_property.loc[max_depth_date:].idxmin()
+        if verbose:
+            print(f'Found snow all gone date: {snow_all_gone_date}')
+    elif alg == "last":
+        # take the day after the last date where the first derivative is negative and
+        snow_all_gone_date = current_SDD + datetime.timedelta(days=1)
+        if verbose:
+            print(f'Found snow all gone date: {snow_all_gone_date}')
+    elif alg == "threshold":
+        if verbose:
+            print(f'Starting snow all gone date: {current_SDD}')
+        # Loop through all dates where the first derivative is robustly negative
+        # Starting with the second to last date in the series
+        # Assign as "preceding_date"
         for f in range(-2, -len(deriv_dates), -1):
-            preceding_date = deriv_dates.index[f-1]
-            if verbose:
-                print(snow_all_test_date, preceding_date)
+            preceding_date = deriv_dates.index[f]
 
-            # If the preceding date is not the date before, reset the counter,
-            # otherwise increment the counter
-            if snow_all_test_date - preceding_date != datetime.timedelta(days=1):
-                if verbose:
-                    print('Did not pass test, resetting counter')
-                counter = 0
+            # If any of the `day_thresh` days preceding the current_SDD hit a snow depth of zero,
+            # ==> this is a spurious late season event <==
+            # change the current_SDD to the preceding date value and continue looping
+            if (snow_property.loc[current_SDD - datetime.timedelta(days=day_thresh):current_SDD] == 0).any():
+                current_SDD = preceding_date
+                next
             else:
-                counter+=1
-
-            # Reassign snow_all_test_date to preceding date value
-            snow_all_test_date = preceding_date
-
-            # If the counter exceeds the sequential days threshold,
-            # break the loop and readjust the index to the now robustly found date
-            if counter >= day_thresh:
-                snow_all_gone_date = deriv_dates.index[f+counter-1]
-                # print(f, counter)
+                # Now we should have the actual snow all gone date
+                snow_all_gone_date = current_SDD + datetime.timedelta(days=1)
                 if verbose:
                     print(f'Found snow all gone date: {snow_all_gone_date}')
                 break
-            # print(f'{counter}\n')
-    except:
-        snow_all_gone_date = firstderiv[firstderiv != 0].index[-1]
-    
-    if verbose:
-        print(f'Snow all gone date {snow_all_gone_date.strftime("%Y-%m-%d")}')
-        print(f'Derivative: {firstderiv.loc[snow_all_gone_date]*86400} m/d')
-        if snow_name is None:
-            snow_name = 'Snow property value'
-        print(f'{snow_name}: {snow_property.loc[snow_all_gone_date]} m')
-    
+
     return snow_all_gone_date, firstderiv
 
 def calc_doydiff(sdd_date_ds_list, varname='sdd_doy', xmas=359, ndv=-9999):
