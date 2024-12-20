@@ -49,7 +49,7 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
         regex pattern to match files
     verbose: boolean
         print filenames
-    
+
     Returns
     -------------
     fns: list
@@ -66,20 +66,20 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
 def get_varnc(basin=None, indir=None, indate=None, templatefn=None, returnvar=None):
     '''
     Obtains specified output files based on template file or basin and date.
-    
+
     Parameters:
         basin (str): The name of the basin containing iSnobal runs (e.g., erw_newbasin_isnobal/). Default is None.
         indir (str): The input directory containing daily runs (e.g., erw_newbasin_isnobal/wy2018/erw_newbasin/). Default is None.
         indate (str): The input date in YYYYMMDD. Default is None.
         templatefn (str): The template file name. Default is None.
         returnvar (str): The variable to return. Default is None and returns all files.
-        
+
     Returns:
         list: A list of output files based on the specified parameters.
 
     TODO:maybe remove basin and add returnvar handling for an input list
     '''
-        
+
     # first check if you are looking for specific date based on template fn
     if templatefn is not None:
         datedir = p.PurePath(templatefn).parent.as_posix()
@@ -92,7 +92,7 @@ def get_varnc(basin=None, indir=None, indate=None, templatefn=None, returnvar=No
         return fn_list(datedir, '*nc')
     else:
         return fn_list(datedir, f'{returnvar}.nc')
-    
+
 def extract_ravel_varvals(ds, varname='thickness'):
     '''Extract variable values from input DataArray.
 
@@ -122,16 +122,16 @@ def extract_boxplot_vals(rav_arr):
 
     TODO: consider using robust thresholds for this (16–84p)
     '''
-    
+
     p25 = np.nanpercentile(rav_arr, 25) # first quartile
     p50 = np.nanmedian(rav_arr)
     p75 = np.nanpercentile(rav_arr, 75) # third quartile
     iqr = p75 - p25
-    
+
     # Compute outlier thresholds
     lowwhisk = p25 - 1.5 * iqr
     highwhisk = p75 + 1.5 * iqr
-    
+
     return lowwhisk, p25, p50, p75, highwhisk
 
 def fn2boxval(fn, varname='thickness'):
@@ -148,22 +148,22 @@ def fn2boxval(fn, varname='thickness'):
     ds = xr.open_dataset(fn)
     raveled_vals = extract_ravel_varvals(ds, varname=varname)
     boxvals = extract_boxplot_vals(raveled_vals)
-    
+
     return boxvals
 
 def extract_dt(fn, inputvar="_snowdepth"):
     '''
     Extracts date from filename (ASO snow depth or swe) and stores it in the corresponding DataSet.
-    
+
     Args:
         fn (str): The filename from which to extract the date.
         inputvar (str, optional): The input variable to use for extraction.
                                     Defaults to "_snowdepth". Change inputvar to '_swe' if using SWE files.
-    
+
     Returns:
         pd.DatetimeIndex: A pandas DatetimeIndex object representing the extracted date.
     '''
-    
+
     # get date from filename and store in dataset as a single dimension?
     dt_file = PurePath(fn).name.split(inputvar)[0].split("_")[-1]
     year = int(dt_file[:4])
@@ -177,15 +177,15 @@ def extract_dt(fn, inputvar="_snowdepth"):
     # Create a dataframe from the parsed dates
     df = pd.DataFrame(columns=['Year', 'Month', 'Day'],
                       data=np.expand_dims(np.array([year, month, day]), 1).T)
-    
+
     if df.Month.dtype != 'int64':
         # Create dictionary of month abbreviations with associated numeric
         # from https://stackoverflow.com/questions/42684530/convert-a-column-in-a-python-pandas-from-string-month-into-int
         d = dict(zip(pd.date_range('2000-01-01', freq='ME', periods=12).strftime('%b'), range(1,13)))
-            
+
         # Map numeric month using month abbreviation dictionary
         df.Month = df.Month.map(d)
-    
+
     dt = pd.to_datetime(df)
     return dt
 
@@ -209,7 +209,7 @@ def calc_sdd(snow_property: pd.Series, alg: str = "threshold", day_thresh: int =
     The snow disappearance date is represented by the last date at which the first derivative is nonzero.
     The "threshold" method ignores spurious late season events defined by occasions when the snow property
     is zero within a definable threshold (day_thresh) of preceding days.
-    
+
     Parameters
     -------------
     snow_property: pandas.Series
@@ -223,7 +223,7 @@ def calc_sdd(snow_property: pd.Series, alg: str = "threshold", day_thresh: int =
         - number of lookback days to consider for the threshold algorithm, defaults to 10
     verbose: boolean
         print additional information, defaults to False
-    
+
     Returns
     -------------
         snow_all_gone_date: pd.Timestamp
@@ -317,16 +317,16 @@ def calc_peak(snow_property, verbose=False, snow_name=None, units='m'):
     '''
     # Determine date of maximum value in snow property
     peak_date = snow_property.idxmax()
-    
+
     # Pull the value of the snow property at peak date
     max_val = snow_property.loc[peak_date]
-    
+
     if verbose:
         if snow_name is None:
             snow_name = 'Snow property value'
         print(f'Peak {snow_name} date: {peak_date.strftime("%Y-%m-%d")}')
         print(f'Peak {snow_name} value: {max_val} {units}')
-    
+
     return peak_date, max_val
 
 def locate_snotel_in_poly(poly_fn: str, site_locs_fn: str, buffer: int = 0):
@@ -340,7 +340,7 @@ def locate_snotel_in_poly(poly_fn: str, site_locs_fn: str, buffer: int = 0):
 
     Returns:
         geopandas.GeoDataFrame: A geodataframe of snotel sites located within the polygon.
-    
+
     Notes:
         site_locs_fn:   EPSG 4326 /uufs/chpc.utah.edu/common/home/skiles-group3/SNOTEL/snotel_sites.json
                         EPSG 32613 /uufs/chpc.utah.edu/common/home/skiles-group3/SNOTEL/snotel_sites_32613.json
@@ -354,16 +354,16 @@ def locate_snotel_in_poly(poly_fn: str, site_locs_fn: str, buffer: int = 0):
         poly_geom = unary_union(poly_gdf.geometry)
     else:
         poly_geom = poly_gdf.iloc[0].geometry
-    
+
     # Buffer this polygon geometry
     poly_geom = poly_geom.buffer(distance=buffer)
-    
+
     # Check if sites are located within polygon
     idx = sites_gdf.intersects(poly_geom)
-    
+
     # Extract sites located within polygon
     poly_sites = sites_gdf.loc[idx]
-    
+
     return poly_sites
 
 def get_nwm_retrospective_LDAS(site_gdf, start=None, end=None, var='SNOWH'):
@@ -383,16 +383,16 @@ def get_nwm_retrospective_LDAS(site_gdf, start=None, end=None, var='SNOWH'):
     bucket = 's3://noaa-nwm-retrospective-3-0-pds/CONUS/zarr'
     fs = S3FileSystem(anon=True)
     ds = xr.open_dataset(S3Map(f"{bucket}/ldasout.zarr", s3=fs), engine='zarr')
-    
+
     if var is not None:
         ds = ds[var]
-      
+
     # Extract data by each site location
     ds_list = [np.squeeze(ds.sel(x=x, y=y, method='nearest')) for x, y in zip(site_gdf.geometry.x.values, site_gdf.geometry.y.values)]
 
     if start is not None and end is not None:
         ds_list = [ds.sel(time=slice(f'{start}T00:00:00', f'{end}T23:00:00')) for ds in ds_list]
-    
+
     return ds_list
 
 
@@ -444,7 +444,7 @@ def get_nwm_retrospective_LDAS(site_gdf, start=None, end=None, var='SNOWH'):
 #             print(f'Retrieved geodataframe of {sitename} SNOTEL site and dataframe for WY {WY}')
 #         return snotel_df, gdf, sitenum, sitename
 
-    
+
 def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH', return_meta=False):
     '''Use metloom to pull snotel coordinates and return as geodataframe and daily data as dict of dataframes
     valid snow variables: SNOWDEPTH, SWE
@@ -465,7 +465,7 @@ def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH', retur
         snotellats.append(lat)
         snotellons.append(lon)
         meta_dfs.append(meta_df)
-        
+
         # set up variable list
         if snowvar == "SNOWDEPTH":
             variables = [snotel_point.ALLOWED_VARIABLES.SNOWDEPTH]
@@ -481,13 +481,13 @@ def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH', retur
             df['SNOWDEPTH_m'] = df['SNOWDEPTH'] * 0.0254
         if snowvar == "SWE":
             df['SWE_m'] = df['SWE'] * 0.0254
-        
+
         # Reset the index
         df = df.reset_index().set_index("datetime")
 
         # Store in dict
         snotel_dfs[snotelNAME] = df
-    
+
     # Create a Geoseries based off of a list of a Shapely point using the lat and lon from the SNOTEL site
     s = gpd.GeoSeries([Point(lon, lat) for lon, lat in zip(snotellons, snotellats)])
 
@@ -505,10 +505,12 @@ def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH', retur
     else:
         return gdf, snotel_dfs
 
-def bin_elev(dem, basinname, p=10, verbose=False, plot_on=True,
+def bin_elev(dem, basinname, equal_spacing=True, p=10, verbose=False, plot_on=True,
              cmap='viridis', figsize=(4, 6), title='elevation binned'
             ):
-    """Bin elevation based on p percent bin width"""
+    """Bin elevation based on p equally spaced bins or percent spacing
+    (which should split into equivalent areas of the watershed)
+    """
     #TODO Add standard deviation/other measure of spread around the mean
     #TODO Add day range of means - e.g., north vs. south
 
@@ -519,19 +521,40 @@ def bin_elev(dem, basinname, p=10, verbose=False, plot_on=True,
     dem_bin_arr = dem_bin.data
     # contains minimum inclusive value of percentile range
     dem_elev_ranges = dict()
-    for r in range(int(100 / p)):
-        # Get percentile range
-        prange = (r * p, (r+1) * p)
-        dem_elev_range = (int(np.nanpercentile(dem, prange[0])),
-                          int(np.nanpercentile(dem, prange[1])))
-        if verbose:
-            print(f'Percentile range: {prange} | elev {dem_elev_range}')
 
-        dem_elev_ranges[f'{r * p}_{(r+1) * p}'] = dem_elev_range
-        conditions = (dem_bin_arr > dem_elev_range[0]) & (dem_bin_arr <= dem_elev_range[1])
-        dem_bin_arr[conditions] = r + 1
-        if r == int(100 / p) - 1:
-            dem_bin_arr[(dem_bin_arr >= dem_elev_range[1])] = r + 2
+    # equally spaced binning
+    if equal_spacing:
+        elev_step = (dem_bin_arr.max() - dem_bin_arr.min()) / p
+        beginning_elev = dem_bin_arr.min()
+        for r in range(p):
+            low = int(r * elev_step + beginning_elev)
+            high = int((r+1) * elev_step + beginning_elev)
+            # Get the elev range
+            dem_elev_range = (low, high)
+            if verbose:
+                print(f'Elev range: {dem_elev_range}')
+
+            dem_elev_ranges[f'{r * p}_{(r+1) * p}'] = dem_elev_range
+
+            conditions = (dem_bin_arr > dem_elev_range[0]) & (dem_bin_arr <= dem_elev_range[1])
+            dem_bin_arr[conditions] = r + 1
+            if r == p - 1:
+                dem_bin_arr[(dem_bin_arr >= dem_elev_range[1])] = r + 2
+    # percentile binning
+    else:
+        for r in range(int(100 / p)):
+            # Get percentile range
+            prange = (r * p, (r+1) * p)
+            dem_elev_range = (int(np.nanpercentile(dem, prange[0])),
+                            int(np.nanpercentile(dem, prange[1])))
+            if verbose:
+                print(f'Percentile range: {prange} | elev {dem_elev_range}')
+
+            dem_elev_ranges[f'{r * p}_{(r+1) * p}'] = dem_elev_range
+            conditions = (dem_bin_arr > dem_elev_range[0]) & (dem_bin_arr <= dem_elev_range[1])
+            dem_bin_arr[conditions] = r + 1
+            if r == int(100 / p) - 1:
+                dem_bin_arr[(dem_bin_arr >= dem_elev_range[1])] = r + 2
 
     # Reassign array to dataset
     dem_bin.data = dem_bin_arr
