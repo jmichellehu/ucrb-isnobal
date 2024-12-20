@@ -592,7 +592,7 @@ def bin_slope(slope, basinname, plot_on=True,
 
     return slope_bin
 
-def bin_aspect(aspect, basinname, compass_rose = ['North', 'East', 'South', 'West'],
+def bin_aspect(aspect, basinname, aspect_labels = ['North', 'East', 'South', 'West'],
                plot_on=True, cmap='plasma_r', figsize=(4, 6), title=f'aspect binned'):
     """Bin input aspect array based on pre-determined classes
     """
@@ -600,15 +600,32 @@ def bin_aspect(aspect, basinname, compass_rose = ['North', 'East', 'South', 'Wes
     # TODO Add day range of means - e.g., north vs. south
     title = f'{basinname} {title}'
 
+    # Calculate number of aspect bins from labels
+    num_aspect_bins = len(aspect_labels)
+
+    # add offset to get the edges of the bins and center aspect (e.g., North centered at 0˚, starts at 348.75˚)
+    # otherwise the leftmost points are used as the edge (e.g., North centered at 11.25˚, starts at 0˚)
+    # Angles will now denote the highest value edge of the bin
+    offset = 360 / num_aspect_bins/2
+    angles = np.linspace(0+offset, 360+offset, num_aspect_bins, endpoint=False)
+
     # Bin aspect
     aspect_crop_rosebin = copy.deepcopy(aspect)
 
     # Extract numpy array from dataset to do reassignment
     aspect_crop_rosebin_arr = aspect_crop_rosebin.data
-    aspect_crop_rosebin_arr[(aspect_crop_rosebin_arr>315) | (aspect_crop_rosebin_arr<=45)] = 1 # North
-    aspect_crop_rosebin_arr[(aspect_crop_rosebin_arr>45) & (aspect_crop_rosebin_arr<=135)] = 2 # East
-    aspect_crop_rosebin_arr[(aspect_crop_rosebin_arr>135) & (aspect_crop_rosebin_arr<=225)] = 3 # South
-    aspect_crop_rosebin_arr[(aspect_crop_rosebin_arr>225) & (aspect_crop_rosebin_arr<=315)] = 4 # West
+
+    for jdx, theta in enumerate(angles):
+        # print(jdx)
+        lower = theta - offset * 2
+        higher = theta
+        # print(lower, higher)
+        # Reassign between 1 and len(angles) + 1
+        if lower < 0:
+            lower += 360
+            aspect_crop_rosebin_arr[(aspect.data >= lower) | (aspect.data < higher)] = jdx + 1
+        else:
+            aspect_crop_rosebin_arr[(aspect.data >= lower) & (aspect.data < higher)]  = jdx + 1
 
     # Reassign array to dataset
     aspect_crop_rosebin.data = aspect_crop_rosebin_arr
