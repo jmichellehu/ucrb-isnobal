@@ -445,17 +445,18 @@ def get_nwm_retrospective_LDAS(site_gdf, start=None, end=None, var='SNOWH'):
 #         return snotel_df, gdf, sitenum, sitename
 
     
-def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH'):
+def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH', return_meta=False):
     '''Use metloom to pull snotel coordinates and return as geodataframe and daily data as dict of dataframes
     valid snow variables: SNOWDEPTH, SWE
     '''
     # start and end date
-    start_date = datetime(WY-1, 10, 1)
-    end_date = datetime(WY, 9, 30)
+    start_date = datetime.datetime(WY-1, 10, 1)
+    end_date = datetime.datetime(WY, 9, 30)
 
     snotel_dfs = dict()
     snotellats = []
     snotellons = []
+    meta_dfs = []
     for snotelNUM, snotelNAME, snotelST in zip(sitenum, sitename, ST):
         snotel_point = SnotelPointData(f"{snotelNUM}:{snotelST}:SNTL", f"{snotelNAME}")
 
@@ -463,6 +464,7 @@ def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH'):
         lon, lat = meta_df.x, meta_df.y
         snotellats.append(lat)
         snotellons.append(lon)
+        meta_dfs.append(meta_df)
         
         # set up variable list
         if snowvar == "SNOWDEPTH":
@@ -498,7 +500,10 @@ def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH'):
     # Convert snotel coords' lat lon to UTM
     gdf = gdf.to_crs(f'epsg:{epsg}')
 
-    return gdf, snotel_dfs
+    if return_meta:
+        return gdf, snotel_dfs, meta_dfs
+    else:
+        return gdf, snotel_dfs
 
 def bin_elev(dem, basinname, p=10, verbose=False, plot_on=True,
              cmap='viridis', figsize=(4, 6), title='elevation binned'
