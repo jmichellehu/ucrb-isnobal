@@ -96,7 +96,7 @@ def load_snowdata(nc_lists, chunks='auto',
         ds_concat_list = [ds.load() for ds in ds_concat_list]
         return ds_concat_list
     
-def calculate_sdd(basindirs, ending, wydir, wy, ds_concat_list, verbose=True):
+def calculate_sdd(basindirs, ending, wydir, wy, ds_concat_list, verbose=True, alg='first'):
         '''Calculate snow disappearance date and day of year using processing.py calc_sdd() func.
         Generate dictionary of missing snow disappearance dates and pixel indices with basin model run type as dict key.'''
         missing_sdd_dict = dict()
@@ -114,7 +114,7 @@ def calculate_sdd(basindirs, ending, wydir, wy, ds_concat_list, verbose=True):
             for i in tqdm(range(sdd_ds.x.size)):
                 for j in range(sdd_ds.y.size):
                     try:
-                        sdd, _ = proc.calc_sdd(ds[:,j,i].to_series(), verbose=verbose)
+                        sdd, _ = proc.calc_sdd(ds[:,j,i].to_series(), alg=alg, verbose=verbose)
                     except Exception as e:
                         e.add_note(f"Something wrong with SDD extract for {i, j}")
                         # store the pixel where sdd extraction is an issue
@@ -157,7 +157,7 @@ def calculate_sdd(basindirs, ending, wydir, wy, ds_concat_list, verbose=True):
             sdd_date_ds['sdd_doy'].attrs = dict(units='day of year', 
                                                 description='snow disappearance day of year for each pixel in the domain')
 
-            outname = f'{wydir}/{PurePath(basindir).stem}_sdd_daythresh{ending}.nc'
+            outname = f'{wydir}/{PurePath(basindir).stem}_sdd_{ending}.nc'
             print(f'Writing out netcdf...\n{outname}')
             # write this out
             sdd_date_ds.to_netcdf(f'{outname}')
@@ -180,13 +180,13 @@ def __main__():
     ds_concat_list = load_snowdata(nc_lists, verbose=True)
 
     print('Calculate SDD')
-    ending = f'WY{wy}'
+    ending = f'WY{wy}_first'
     # Calculate the per-pixel snow disappearance date
     missing_sdd_dict = calculate_sdd(basindirs, ending, wydir, wy, ds_concat_list)
     
     print('Write out to json')
     # Dump missing snow disappearance date dictionary to json file
-    with open(f'{wydir}/missing_sdd_dict_daythresh{ending}.json', 'w') as fp:
+    with open(f'{wydir}/missing_sdd_dict_{ending}.json', 'w') as fp:
         json.dump(missing_sdd_dict, fp)
 
 if __name__ == "__main__":
