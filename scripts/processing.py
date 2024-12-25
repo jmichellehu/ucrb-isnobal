@@ -398,10 +398,16 @@ def get_nwm_retrospective_LDAS(site_gdf, start=None, end=None, var='SNOWH'):
 def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH', return_meta=False):
     '''Use metloom to pull snotel coordinates and return as geodataframe and daily data as dict of dataframes
     valid snow variables: SNOWDEPTH, SWE
+    WY can be a single year or a list of years
+    snowvar can be SNOWDEPTH, SWE, otherwise defaults to both
     '''
-    # start and end date
-    start_date = datetime.datetime(WY-1, 10, 1)
-    end_date = datetime.datetime(WY, 9, 30)
+    # start and end date, adjust for list of water years
+    if type(WY) is list:
+        start_date = datetime.datetime(WY[0]-1, 10, 1)
+        end_date = datetime.datetime(WY[-1], 9, 30)
+    elif type(WY) is int:
+        start_date = datetime.datetime(WY-1, 10, 1)
+        end_date = datetime.datetime(WY, 9, 30)
 
     snotel_dfs = dict()
     snotellats = []
@@ -421,6 +427,9 @@ def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH', retur
             variables = [snotel_point.ALLOWED_VARIABLES.SNOWDEPTH]
         elif snowvar == "SWE":
             variables = [snotel_point.ALLOWED_VARIABLES.SWE]
+        else:
+            variables = [snotel_point.ALLOWED_VARIABLES.SNOWDEPTH, snotel_point.ALLOWED_VARIABLES.SWE]
+
 
         # request the data - use daily, the hourly data is too noisy and messes up SDD calcs
         df = snotel_point.get_daily_data(start_date, end_date, variables)
@@ -429,7 +438,10 @@ def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH', retur
         # Convert to metric here
         if snowvar == "SNOWDEPTH":
             df['SNOWDEPTH_m'] = df['SNOWDEPTH'] * 0.0254
-        if snowvar == "SWE":
+        elif snowvar == "SWE":
+            df['SWE_m'] = df['SWE'] * 0.0254
+        else:
+            df['SNOWDEPTH_m'] = df['SNOWDEPTH'] * 0.0254
             df['SWE_m'] = df['SWE'] * 0.0254
 
         # Reset the index
