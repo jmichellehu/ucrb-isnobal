@@ -16,10 +16,14 @@ from typing import List
 
 import numpy as np
 import pandas as pd
+import datetime
+
 import xarray as xr
 from pathlib import PurePath
 import copy
 import json 
+
+from tqdm import tqdm
 
 sys.path.append('/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/ucrb-isnobal/scripts/')
 import processing as proc
@@ -49,10 +53,10 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
          print(fns)
     return fns
 
-def get_dirs_filenames(basin, varfile='snow.nc', verbose=True, 
+def get_dirs_filenames(basin, varfile='snow.nc', verbose=True, res=100,
                            workdir='/uufs/chpc.utah.edu/common/home/skiles-group3/model_runs/'):
     '''Find basin directories, water year and list of daily snow.nc files for each model run'''
-    basindirs = fn_list(workdir, f'{basin}*/*/*/')
+    basindirs = fn_list(workdir, f'{basin}*/*/{basin}*{res}*/')
     if verbose: 
         [print(b) for b in basindirs]
 
@@ -60,15 +64,16 @@ def get_dirs_filenames(basin, varfile='snow.nc', verbose=True,
     WY = int(PurePath(basindirs[0]).parents[0].stem.split('wy')[-1])
     if verbose:
         print(WY)
+
     # Update basindirs for the selected water year
-    basindirs = fn_list(workdir, f'{basin}*/*{WY}/{basin}*/')
+    basindirs = fn_list(workdir, f'{basin}*/*{WY}/{basin}*{res}*/')
     wydir = PurePath(basindirs[0]).parents[0].as_posix()
     if verbose:
         [print(b) for b in basindirs]
     # list all the daily snow.nc files for a water year for each treatment
     nc_lists = [fn_list(basindir, f'*/{varfile}') for basindir in basindirs]
     if verbose: 
-        print(len(nc_lists))
+        _ = [print(len(f)) for f in nc_lists]
 
     return basindirs, wydir, WY, nc_lists
 
@@ -92,9 +97,90 @@ def load_snowdata(nc_lists, chunks='auto',
         ds_concat_list = [xr.concat(ds_list, dim='time') for ds_list in ds_lists]
         ds_concat_list = [ds.load() for ds in ds_concat_list]
         return ds_concat_list
+
+def calc_sdd(snow_property: pd.Series, alg: str = "threshold", day_thresh: int = 10, verbose: bool = False):
+    '''
+    Calculate snow disappearance date from a pandas series of a snow property (snow depth or SWE).
+    The snow disappearance date is represented by the last date at which the first derivative is nonzero.
+    The "threshold" method ignores spurious late season events defined by occasions when the snow property
+    is zero within a definable threshold (day_thresh) of preceding days. 
     
-def calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh, verbose=True):
-        '''Calculate snow disappearance date and day of year using processing.py calc_sdd() func and input day_thresh.
+    Parameters
+    -------------
+    snow_property: pandas.Series
+        snow depth or SWE (measurement units in meters)
+    alg: str
+        algorithm to use for snow all gone date calculation
+        - "first": first date where snow property hits zero after the maximum value
+        - "last": last date where snow property hits zero after the maximum value
+        - "threshold": last date where the first derivative of snow property is negative for a definable threshold
+    day_thresh: int
+        - number of lookback days to consider for the threshold algorithm, defaults to 10
+    verbose: boolean
+        print additional information, defaults to False
+    
+    Returns
+    -------------
+        snow_all_gone_date: pd.Timestamp
+            date at which the snow property disappears
+        firstderiv: pd.Series
+            first derivative of the snow property
+    '''
+    # Calculate first derivative of snow property
+    firstderiv = snow_property.diff() / snow_property.index.to_series().diff().dt.total_seconds()
+
+    # Get list of dates with negative derivatives (declining snow property)
+    deriv_dates = firstderiv[firstderiv < 0]
+
+    # Determine last date at which derivative is negative
+    current_SDD = deriv_dates.index[-1] + pd.Timedelta(days=1)
+
+    # Based on algorithm, determine snow all gone date
+    if verbose: 
+        print(f'Algorithm: {alg}')
+
+    if alg == "first":
+        # Pull index of maximum value
+        max_depth_date = snow_property.idxmax()
+        if verbose:
+            print(f"Max depth date: {max_depth_date}")
+            print(f"Max depth is: {snow_property.loc[max_depth_date]}")
+        # Pull index of minimum value after max depth date
+        # idxmin pulls the first value (date) if multiple meet the condition
+        snow_all_gone_date = snow_property.loc[max_depth_date:].idxmin()
+        if verbose:
+            print(f'Found snow all gone date: {snow_all_gone_date}')
+    elif alg == "last":
+        # take the day after the last date where the first derivative is negative and 
+        snow_all_gone_date = current_SDD + datetime.timedelta(days=1)
+        if verbose:
+            print(f'Found snow all gone date: {snow_all_gone_date}')
+    elif alg == "threshold":
+        if verbose:
+            print(f'Starting snow all gone date: {current_SDD}')
+        # Loop through all dates where the first derivative is robustly negative
+        # Starting with the second to last date in the series
+        # Assign as "preceding_date"
+        for f in range(-2, -len(deriv_dates), -1):
+            preceding_date = deriv_dates.index[f]
+
+            # If any of the `day_thresh` days preceding the current_SDD hit a snow depth of zero, 
+            # ==> this is a spurious late season event <==
+            # change the current_SDD to the preceding date value and continue looping
+            if (snow_property.loc[current_SDD - datetime.timedelta(days=day_thresh):current_SDD] == 0).any():
+                current_SDD = preceding_date
+                next
+            else:
+                # Now we should have the actual snow all gone date
+                snow_all_gone_date = current_SDD + datetime.timedelta(days=1)
+                if verbose:
+                    print(f'Found snow all gone date: {snow_all_gone_date}')
+                break
+
+    return snow_all_gone_date, firstderiv
+
+def calculate_sdd(basindirs, ending, wydir, wy, ds_concat_list, verbose=True, alg='first'):
+        '''Calculate snow disappearance date and day of year using processing.py calc_sdd() func.
         Generate dictionary of missing snow disappearance dates and pixel indices with basin model run type as dict key.'''
         missing_sdd_dict = dict()
         for basindir, ds in zip(basindirs, ds_concat_list):
@@ -106,13 +192,14 @@ def calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh, verbose=True
             # Create and empty list for keeping track of missing sdd pixels
             missing_list = []
 
+            print('Begin looping...')
             # fill the array with the sdd value if calculable
-            for i in range(ds.x.size):
-                for j in range(ds.y.size):
+            for i in tqdm(range(sdd_ds.x.size)):
+                for j in range(sdd_ds.y.size):
                     try:
-                        sdd, _ = proc.calc_sdd(ds[:,j,i].to_series(), day_thresh=day_thresh)
+                        sdd, _ = calc_sdd(ds[:,j,i].to_series(), alg=alg, verbose=verbose)
                     except Exception as e:
-                        e.add_note(f"Something wrong with SDD extract for {i, j} at day_thresh of {day_thresh}")
+                        e.add_note(f"Something wrong with SDD extract for {i, j}")
                         # store the pixel where sdd extraction is an issue
                         missing_list.append((i, j))
 
@@ -121,6 +208,7 @@ def calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh, verbose=True
 
                     sdd_arr[j, i] = sdd.timestamp()
 
+            print('Storing missing list in dict')
             # enter the missing_list into a dict using the basindir stems as keys
             missing_sdd_dict[PurePath(basindirs[0]).stem] = missing_list
 
@@ -135,8 +223,10 @@ def calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh, verbose=True
             sdd_date_ds = sdd_ds.to_dataset()
             # Convert to datetime to access .dt.dayofyear for DOY calc
             # Needs to be in seconds, put up with nanosecond precision warning
+            print('Converting SDD type to datetime64')
             sdd_date_ds['sdd'] = sdd_date_ds['sdd'].astype('datetime64[s]')
 
+            print('Calculating DOY')
             # Calculate Day of year
             sdd_date_ds['sdd_doy'] = sdd_date_ds['sdd'].dt.dayofyear
 
@@ -150,8 +240,10 @@ def calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh, verbose=True
             sdd_date_ds['sdd_doy'].attrs = dict(units='day of year', 
                                                 description='snow disappearance day of year for each pixel in the domain')
 
+            outname = f'{wydir}/{PurePath(basindir).stem}_sdd_{ending}_{alg}.nc'
+            print(f'Writing out netcdf...\n{outname}')
             # write this out
-            sdd_date_ds.to_netcdf(f'{wydir}/{PurePath(basindir).stem}_sdd_daythresh{day_thresh}_WY{wy}.nc')
+            sdd_date_ds.to_netcdf(f'{outname}')
         
         return missing_sdd_dict
 
@@ -159,23 +251,25 @@ def __main__():
     # Parse command line args
     parser = argparse.ArgumentParser(description='Basin-wide snow disappearance calculation')
     parser.add_argument('basin', type=str, help='name of basin')
-    parser.add_argument('-t', '--day_thresh', type=str, help='Threshold of days \
-                        to calculate snow disappearance. Default is 2 days', default=2)
     args = parser.parse_args()
     basin = args.basin
-    day_thresh = args.day_thresh
     
+    print('Getting dirs_filenames')
     # Extract the basin directories, water year and list of daily snow.nc files for each model run
     basindirs, wydir, wy, nc_lists = get_dirs_filenames(basin, verbose=True)
     
+    print('Load snow data')
     # Load the snow data
     ds_concat_list = load_snowdata(nc_lists, verbose=True)
 
+    print('Calculate SDD')
+    ending = f'WY{wy}'
     # Calculate the per-pixel snow disappearance date
-    missing_sdd_dict = calculate_sdd(basindirs, wydir, wy, ds_concat_list, day_thresh)
+    missing_sdd_dict = calculate_sdd(basindirs, ending, wydir, wy, ds_concat_list)
     
+    print('Write out to json')
     # Dump missing snow disappearance date dictionary to json file
-    with open(f'{wydir}/missing_sdd_dict_daythresh{day_thresh}_WY{wy}.json', 'w') as fp:
+    with open(f'{wydir}/missing_sdd_dict_{ending}.json', 'w') as fp:
         json.dump(missing_sdd_dict, fp)
 
 if __name__ == "__main__":

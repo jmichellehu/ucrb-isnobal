@@ -10,6 +10,11 @@ from typing import List
 sys.path.append('/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/ucrb-isnobal/scripts/')
 import processing as proc
 
+# NWM proj4 string
+proj4 = '+proj=lcc +lat_0=40 +lon_0=-97 +lat_1=30 +lat_2=60 +x_0=0 +y_0=0 +R=6370000 +units=m +no_defs'
+ancillarydir = '/uufs/chpc.utah.edu/common/home/skiles-group3/ancillary_sdswe_products'
+poly_dir = '/uufs/chpc.utah.edu/common/home/skiles-group1/jmhu/ancillary/polys'
+
 def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
     """Match and sort filenames based on a regex pattern in specified directory
 
@@ -21,7 +26,7 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
         regex pattern to match files
     verbose: boolean
         print filenames
-    
+
     Returns
     -------------
     fns: list
@@ -31,7 +36,7 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
     for f in glob.glob(thisDir + "/" + fn_pattern):
         fns.append(f)
     fns.sort()
-    if verbose: 
+    if verbose:
         print(fns)
     return fns
 
@@ -43,34 +48,33 @@ def parse_arguments():
         argparse.Namespace
             Parsed command line arguments.
         """
-        parser = argparse.ArgumentParser(description='Extract National Water Model snow depth ["SNOWH"] \
-                                         at point sites [SNOTEL] within a basin for a given water year.')
+        parser = argparse.ArgumentParser(description='Extract National Water Model snow variable \
+                                         ["SNOWH" or "SNEQV"] at point sites [SNOTEL] within a basin \
+                                         for a given water year.')
         parser.add_argument('basin', type=str, help='Basin name')
         parser.add_argument('wy', type=int, help='Water year of interest')
         parser.add_argument('-shp', '--shapefile', type=str, help='Shapefile of basin polygon', default=None)
-        parser.add_argument('-loc', '--sitelocs', type=str, help='json file of point locations', 
+        parser.add_argument('-var', '--variable', type=str, help='NWM snow data variable',
+                            choices=['SNOWH', 'SNEQV'], default='SNOWH')
+        parser.add_argument('-loc', '--sitelocs', type=str, help='json file of point locations',
                             default='SNOTEL/snotel_sites_32613.json')
         parser.add_argument('-o', '--out_path', type=str, help='Output path', default=None)
         parser.add_argument('-v', '--verbose', action='store_true', help='Print filenames')
         return parser.parse_args()
 
 def __main__():
-    # NWM proj4 string
-    proj4 = '+proj=lcc +lat_0=40 +lon_0=-97 +lat_1=30 +lat_2=60 +x_0=0 +y_0=0 +R=6370000 +units=m +no_defs'
-    ancillarydir = '/uufs/chpc.utah.edu/common/home/skiles-group3/ancillary_sdswe_products'
-    
     args = parse_arguments()
     verbose = args.verbose
     basin = args.basin
     wy = args.wy
+    var = args.variable
     poly_fn = args.shapefile
     allsites_fn = f'{ancillarydir}/{args.sitelocs}'
     outname = args.out_path
 
     if poly_fn is None:
-        poly_dir = '/uufs/chpc.utah.edu/common/home/skiles-group1/jmhu/ancillary/polys'
         poly_fn = fn_list(poly_dir, f'*{basin}*shp')[0]
-    
+
     # Locate SNOTEL sites within basin using metloom
     found_sites = proc.locate_snotel_in_poly(poly_fn=poly_fn, site_locs_fn=allsites_fn, buffer=200)
 
@@ -87,10 +91,10 @@ def __main__():
     if verbose:
         print(gdf_metloom_nwm.crs)
 
-    basin_nwm_ds = proc.get_nwm_retrospective_LDAS(gdf_metloom_nwm, 
-                                                   start=f'{wy-1}-10-01', 
-                                                   end=f'{wy}-09-30', 
-                                                   var='SNOWH')
+    basin_nwm_ds = proc.get_nwm_retrospective_LDAS(gdf_metloom_nwm,
+                                                   start=f'{wy-1}-10-01',
+                                                   end=f'{wy}-09-30',
+                                                   var=var)
 
     # Turn it into a dict
     nwm_snowh_dict = dict()
