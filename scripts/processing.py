@@ -369,12 +369,12 @@ def locate_snotel_in_poly(poly_fn: str, site_locs_fn: str, buffer: int = 0):
 def get_nwm_retrospective_LDAS(site_gdf, start=None, end=None, var='SNOWH'):
     '''
     Retrieves NWM retrospective LDAS (NoahMP land surface model output) data for a given site or sites.
-
+    See list of available variables here https://docs.opendata.aws/noaa-nwm-pds/readme.html
     Parameters:
         site_gdf (GeoDataFrame): A GeoDataFrame containing the site locations.
         start (str, optional): The start date of the data to retrieve. Defaults to None. Format: YYYY-MM-DD
         end (str, optional): The end date of the data to retrieve. Defaults to None. Format: YYYY-MM-DD
-        var (str, optional): The variable to retrieve. Defaults to snow depth 'SNOWH'.
+        var (str, optional): The variable to retrieve. Defaults to snow depth 'SNOWH', SNEQV and others also available
 
     Returns:
         list: A list of xarray Datasets containing the retrieved data for each input site.
@@ -400,6 +400,14 @@ def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH', retur
     valid snow variables: SNOWDEPTH, SWE
     WY can be a single year or a list of years
     snowvar can be SNOWDEPTH, SWE, otherwise defaults to both
+    Parameters:
+        sitenum (list): list of snotel site numbers
+        sitename (list): list of snotel site names
+        ST (list): list of state abbreviations
+        WY (int or list): water year or list of water years
+        epsg (int): epsg code for UTM zone, defaults to 32613
+        snowvar (str): snow variable to pull, 'SNOWDEPTH' or 'SWE', defaults to 'SNOWDEPTH'
+        return_meta (bool): return metadata dataframes, defaults to False
     '''
     # start and end date, adjust for list of water years
     if type(WY) is list:
@@ -443,6 +451,7 @@ def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH', retur
         else:
             df['SNOWDEPTH_m'] = df['SNOWDEPTH'] * 0.0254
             df['SWE_m'] = df['SWE'] * 0.0254
+            df['SNOWDENSITY_kgm3'] = df['SWE_m'] / df['SNOWDEPTH_m'] * 1000
 
         # Reset the index
         df = df.reset_index().set_index("datetime")
