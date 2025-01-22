@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+'''
+This script extracts modeled snow depth or snow density timeseries data at identified SNOTEL sites within a basin
+and outputs as csv files.
+'''
 import sys
 import glob
 import os
@@ -42,7 +46,7 @@ def extract_timeseries(basindirs: list, labels: list, basin: str,
                        wy: str, gdf_metloom: gpd.GeoDataFrame,
                        sitenames: list, verbose: bool = True,
                        chunks='auto', month='run20',
-                       varname='snow'
+                       varname='depth'
                        ):
             """
             Extracts timeseries data for a given variable and sites based on input
@@ -66,7 +70,7 @@ def extract_timeseries(basindirs: list, labels: list, basin: str,
             -------------
             None
             """
-            if varname == 'snow':
+            if varname == 'depth':
                 drop_var_list=['snow_density', 'specific_mass',
                                'liquid_water', 'temp_surf', 'temp_lower',
                                 'temp_snowcover', 'thickness_lower',
@@ -92,7 +96,8 @@ def extract_timeseries(basindirs: list, labels: list, basin: str,
                 else:
                     print("^^DNE, calculating...")
                 days = dict()
-                basin_days = fn_list(basindir, f"{month}*/{varname}.nc")
+                # this is file name, it contains deepth and density
+                basin_days = fn_list(basindir, f"{month}*/snow.nc")
                 days[label] = basin_days
 
                 ds_dict = dict()
@@ -137,6 +142,7 @@ def parse_arguments():
         parser.add_argument('-st', '--state', type=str, help='State abbreviation', default='CO')
         parser.add_argument('-loc', '--sitelocs', type=str, help='json file of point locations',
                             default='SNOTEL/snotel_sites_32613.json')
+        parser.add_argument('-var', '--variable', help='Snow variable', default='depth')
         parser.add_argument('-v', '--verbose', help='Print filenames', default=True)
         return parser.parse_args()
 
@@ -147,6 +153,7 @@ def __main__():
     poly_fn = args.shapefile
     state_abbrev = args.state
     sitelocs = args.sitelocs
+    varname = args.variable
     verbose = args.verbose
 
     # Set up directories
@@ -157,7 +164,7 @@ def __main__():
     allsites_fn = f'{ancillary_dir}/{sitelocs}'
 
     if poly_fn is None:
-        poly_dir = '/uufs/chpc.utah.edu/common/home/skiles-group1/jmhu/ancillary/polys'
+        poly_dir = '/uufs/chpc.utah.edu/common/home/skiles-group3/jmhu/ancillary/polys'
         poly_fn = fn_list(poly_dir, f'*{basin}*shp')[0]
 
     # Locate SNOTEL sites within basin using metloom
@@ -177,8 +184,9 @@ def __main__():
 
     # these should be modified based on the basindirs, add dict
     labels = ['iSnobal-HRRR', 'HRRR-MODIS']
+    # labels = ['iSnobal-HRRR', 'iSnobal-HRRR_py39']
 
-    extract_timeseries(basindirs, labels, basin, wy, gdf_metloom, sitenames, verbose=verbose)
+    extract_timeseries(basindirs, labels, basin, wy, gdf_metloom, sitenames, varname=varname, verbose=verbose)
 
 if __name__ == "__main__":
     __main__()
