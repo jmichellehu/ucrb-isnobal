@@ -13,7 +13,7 @@ import processing as proc
 # NWM proj4 string
 proj4 = '+proj=lcc +lat_0=40 +lon_0=-97 +lat_1=30 +lat_2=60 +x_0=0 +y_0=0 +R=6370000 +units=m +no_defs'
 ancillarydir = '/uufs/chpc.utah.edu/common/home/skiles-group3/ancillary_sdswe_products'
-poly_dir = '/uufs/chpc.utah.edu/common/home/skiles-group1/jmhu/ancillary/polys'
+poly_dir = '/uufs/chpc.utah.edu/common/home/skiles-group3/jmhu/ancillary/polys'
 
 def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
     """Match and sort filenames based on a regex pattern in specified directory
@@ -97,19 +97,19 @@ def __main__():
                                                    var=var)
 
     # Turn it into a dict
-    nwm_snowh_dict = dict()
+    nwm_dict = dict()
     for jdx, ds in enumerate(basin_nwm_ds):
-        nwm_snowh_dict[sitenames.values[jdx]] = ds.values
+        nwm_dict[sitenames.values[jdx]] = ds.values
 
     # Turn it into a dataframe
-    df = pd.DataFrame(nwm_snowh_dict, index=ds['time'].values)
+    df = pd.DataFrame(nwm_dict, index=ds['time'].values)
 
     # Save the the dataframe as csv for easy access later
     if outname is None:
         nwm_basin_dir = f'{ancillarydir}/NWM/{basin}'
         if not os.path.exists(nwm_basin_dir):
             os.makedirs(nwm_basin_dir)
-        outname = f'{nwm_basin_dir}/{basin}_nwm_snotelmetloom_SNOWH_wy{wy}.csv'
+        outname = f'{nwm_basin_dir}/{basin}_nwm_snotelmetloom_{var}_wy{wy}.csv'
 
     df.to_csv(outname)
     if verbose:
