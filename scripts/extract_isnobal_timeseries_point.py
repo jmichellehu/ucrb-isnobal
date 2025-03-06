@@ -84,6 +84,7 @@ def extract_timeseries(basindirs: list, labels: list, basin: str,
                  thisvar = 'snow_density'
 
             for kdx, (label, basindir) in enumerate(zip(labels, basindirs)):
+                print(kdx, label)
                 outdir = PurePath(basindir).parents[0].as_posix()
                 outfn = f'{basin}_{label}_{thisvar}_snotelmetloom_wy{wy}.csv'
                 model_ts_fn = f'{outdir}/{outfn}'
@@ -98,9 +99,11 @@ def extract_timeseries(basindirs: list, labels: list, basin: str,
                 else:
                     print("^^DNE, calculating...")
                 days = dict()
-                # this is file name, it contains deepth and density
+                # this is file name, it contains depth and density
                 basin_days = fn_list(basindir, f"{month}*/snow.nc")
                 days[label] = basin_days
+                if verbose:
+                    print(len(basin_days))
 
                 ds_dict = dict()
 
@@ -136,8 +139,9 @@ def parse_arguments():
         argparse.Namespace
             Parsed command line arguments.
         """
-        parser = argparse.ArgumentParser(description='Extract iSnobal model output snow depth ["thickness"] \
-                                         at point sites [SNOTEL] within a basin for a given water year.')
+        parser = argparse.ArgumentParser(description='Extract iSnobal model output snow variable\
+                                         ["depth" (thickness) or "density"] at point sites [SNOTEL]\
+                                        within a basin for a given water year.')
         parser.add_argument('basin', type=str, help='Basin name')
         parser.add_argument('wy', type=int, help='Water year of interest')
         parser.add_argument('-shp', '--shapefile', type=str, help='Shapefile of basin polygon', default=None)
@@ -187,9 +191,22 @@ def __main__():
     # Get the basin directories based on input wy
     basindirs = fn_list(workdir, f'{basin}*/wy{wy}/{basin}*/')
 
-    # these should be modified based on the basindirs, add dict
-    labels = ['iSnobal-HRRR', 'HRRR-MODIS']
-    # labels = ['iSnobal-HRRR', 'iSnobal-HRRR_py39']
+    # Based on the basindirs, generate a dict
+    label_dict = dict()
+    for basindir in basindirs:
+        ending = PurePath(basindir).stem.split('basin_')[-1]
+        if ending == '100m':
+            label_dict[str(PurePath(basindir).stem)] = 'iSnobal-HRRR'
+        elif ending =='100m_solar_albedo':
+             label_dict[str(PurePath(basindir).stem)] = 'HRRR-MODIS'
+
+    # Filter out basindirs that don't have enough snow.nc files, make sure most of WY is run (at least 270 files)
+    basindirs = [basindir for basindir in basindirs if len(fn_list(basindir, 'run20*/snow.nc'))>=270]
+
+    # Now generate the labels based on the basindirs and the dict you've created
+    labels = [label_dict[str(PurePath(basindir).stem)] for basindir in basindirs]
+    if verbose:
+         print(labels)
 
     extract_timeseries(basindirs, labels, basin, wy, gdf_metloom, sitenames, overwrite=overwrite, varname=varname, verbose=verbose)
 
