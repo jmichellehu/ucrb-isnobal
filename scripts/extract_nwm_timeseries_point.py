@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# Script to extract National Water Model snow data ["SNOWH" or "SNEQV"] at point sites [SNOTEL] within a basin for a given water year.
+
 import os
 import sys
 import glob
