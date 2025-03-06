@@ -44,7 +44,7 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
 
 def extract_timeseries(basindirs: list, labels: list, basin: str,
                        wy: str, gdf_metloom: gpd.GeoDataFrame,
-                       sitenames: list, verbose: bool = True,
+                       sitenames: list, overwrite: bool = False, verbose: bool = True,
                        chunks='auto', month='run20',
                        varname='depth'
                        ):
@@ -91,8 +91,10 @@ def extract_timeseries(basindirs: list, labels: list, basin: str,
                     print(model_ts_fn)
 
                 # Default - do not overwrite files
-                if os.path.exists(model_ts_fn):
+                if os.path.exists(model_ts_fn) and not overwrite:
                     print(f"{model_ts_fn} exists, skipping!")
+                elif os.path.exists(model_ts_fn) and overwrite:
+                    print(f"{model_ts_fn} exists, but overwrite flag on, re-calculating...")
                 else:
                     print("^^DNE, calculating...")
                 days = dict()
@@ -142,7 +144,9 @@ def parse_arguments():
         parser.add_argument('-st', '--state', type=str, help='State abbreviation', default='CO')
         parser.add_argument('-loc', '--sitelocs', type=str, help='json file of point locations',
                             default='SNOTEL/snotel_sites_32613.json')
-        parser.add_argument('-var', '--variable', help='Snow variable', default='depth')
+        parser.add_argument('-var', '--variable', type=str, help='iSnobal snow variable',
+                            choices=['depth', 'density'], default='depth')
+        parser.add_argument('-o', '--overwrite', help='Overwrite existing files', default=False)
         parser.add_argument('-v', '--verbose', help='Print filenames', default=True)
         return parser.parse_args()
 
@@ -154,6 +158,7 @@ def __main__():
     state_abbrev = args.state
     sitelocs = args.sitelocs
     varname = args.variable
+    overwrite = args.overwrite
     verbose = args.verbose
 
     # Set up directories
@@ -186,7 +191,7 @@ def __main__():
     labels = ['iSnobal-HRRR', 'HRRR-MODIS']
     # labels = ['iSnobal-HRRR', 'iSnobal-HRRR_py39']
 
-    extract_timeseries(basindirs, labels, basin, wy, gdf_metloom, sitenames, varname=varname, verbose=verbose)
+    extract_timeseries(basindirs, labels, basin, wy, gdf_metloom, sitenames, overwrite=overwrite, varname=varname, verbose=verbose)
 
 if __name__ == "__main__":
     __main__()
