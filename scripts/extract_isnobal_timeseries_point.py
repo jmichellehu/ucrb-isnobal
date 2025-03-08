@@ -42,6 +42,42 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
          print(fns)
     return fns
 
+def prep_basin_data(basin, WY, poly_fn, ST, workdir, site_locs_fn, verbose):
+    """Prepare basin snotel data and directories for processing"""
+    # Locate SNOTEL sites within basin
+    found_sites = proc.locate_snotel_in_poly(poly_fn=poly_fn, site_locs_fn=site_locs_fn)
+
+    # Get site names and site numbers
+    sitenames = found_sites['site_name']
+    sitenums = found_sites['site_num']
+    if verbose:
+        print(sitenames)
+
+    ST_arr = [ST] * len(sitenums)
+    gdf_metloom, _ = proc.get_snotel(sitenums, sitenames, ST_arr, WY=WY)
+
+    # Get the basin directories based on input wy
+    basindirs = fn_list(workdir, f'{basin}*/wy{WY}/{basin}*/')
+
+    # Based on the basindirs, generate a dict
+    label_dict = dict()
+    for basindir in basindirs:
+        ending = PurePath(basindir).stem.split('basin_')[-1]
+        if ending == '100m':
+            label_dict[str(PurePath(basindir).stem)] = 'iSnobal-HRRR'
+        elif ending =='100m_solar_albedo':
+             label_dict[str(PurePath(basindir).stem)] = 'HRRR-MODIS'
+
+    # Filter out basindirs that don't have enough snow.nc files, make sure most of WY is run (at least 270 files)
+    basindirs = [basindir for basindir in basindirs if len(fn_list(basindir, 'run20*/snow.nc'))>=270]
+
+    # Now generate the labels based on the basindirs and the dict you've created
+    labels = [label_dict[str(PurePath(basindir).stem)] for basindir in basindirs]
+    if verbose:
+         print(labels)
+
+    return labels, basindirs, gdf_metloom, sitenames
+
 def extract_timeseries(basindirs: list, labels: list, basin: str,
                        wy: str, gdf_metloom: gpd.GeoDataFrame,
                        sitenames: list, overwrite: bool = False, verbose: bool = True,
@@ -82,6 +118,16 @@ def extract_timeseries(basindirs: list, labels: list, basin: str,
                                 'temp_snowcover', 'thickness_lower',
                                 'water_saturation', 'projection']
                  thisvar = 'snow_density'
+            elif varname == 'swe':
+                drop_var_list=['thickness', 'snow_density',
+                               'liquid_water', 'temp_surf', 'temp_lower',
+                                'temp_snowcover', 'thickness_lower',
+                                'water_saturation', 'projection']
+                thisvar = 'specific_mass'
+                mult = 1000
+            else:
+                print("Variable not recognized, exiting...")
+                sys.exit(1)
 
             for kdx, (label, basindir) in enumerate(zip(labels, basindirs)):
                 print(kdx, label)
@@ -125,6 +171,10 @@ def extract_timeseries(basindirs: list, labels: list, basin: str,
                 # Turn it into a dataframe
                 basin_df = pd.DataFrame(basin_dict, index=ds['time'].values)
 
+                # Adjust units for SWE, need to divide by 1000 to convert from mm to m
+                if varname == 'swe':
+                    basin_df = basin_df / mult
+
                 if verbose:
                     print(f'Saving to {model_ts_fn}')
 
@@ -140,7 +190,7 @@ def parse_arguments():
             Parsed command line arguments.
         """
         parser = argparse.ArgumentParser(description='Extract iSnobal model output snow variable\
-                                         ["depth" (thickness) or "density"] at point sites [SNOTEL]\
+                                         ["depth" (thickness), "density", or "swe"] at point sites [SNOTEL]\
                                         within a basin for a given water year.')
         parser.add_argument('basin', type=str, help='Basin name')
         parser.add_argument('wy', type=int, help='Water year of interest')
@@ -149,7 +199,7 @@ def parse_arguments():
         parser.add_argument('-loc', '--sitelocs', type=str, help='json file of point locations',
                             default='SNOTEL/snotel_sites_32613.json')
         parser.add_argument('-var', '--variable', type=str, help='iSnobal snow variable',
-                            choices=['depth', 'density'], default='depth')
+                            choices=['depth', 'density', 'swe'], default='depth')
         parser.add_argument('-o', '--overwrite', help='Overwrite existing files', default=False)
         parser.add_argument('-v', '--verbose', help='Print filenames', default=True)
         return parser.parse_args()
@@ -176,37 +226,9 @@ def __main__():
         poly_dir = '/uufs/chpc.utah.edu/common/home/skiles-group3/jmhu/ancillary/polys'
         poly_fn = fn_list(poly_dir, f'*{basin}*shp')[0]
 
-    # Locate SNOTEL sites within basin using metloom
-    found_sites = proc.locate_snotel_in_poly(poly_fn=poly_fn, site_locs_fn=allsites_fn, buffer=200)
-
-    # Get site names and site numbers
-    sitenames = found_sites['site_name']
-    sitenums = found_sites['site_num']
-    print(sitenames)
-
-    # Use the site numbers to get the metloom snotel site coords and data
-    ST_arr = [state_abbrev] * len(sitenums)
-    gdf_metloom, _ = proc.get_snotel(sitenums, sitenames, ST_arr, WY=wy)
-
-    # Get the basin directories based on input wy
-    basindirs = fn_list(workdir, f'{basin}*/wy{wy}/{basin}*/')
-
-    # Based on the basindirs, generate a dict
-    label_dict = dict()
-    for basindir in basindirs:
-        ending = PurePath(basindir).stem.split('basin_')[-1]
-        if ending == '100m':
-            label_dict[str(PurePath(basindir).stem)] = 'iSnobal-HRRR'
-        elif ending =='100m_solar_albedo':
-             label_dict[str(PurePath(basindir).stem)] = 'HRRR-MODIS'
-
-    # Filter out basindirs that don't have enough snow.nc files, make sure most of WY is run (at least 270 files)
-    basindirs = [basindir for basindir in basindirs if len(fn_list(basindir, 'run20*/snow.nc'))>=270]
-
-    # Now generate the labels based on the basindirs and the dict you've created
-    labels = [label_dict[str(PurePath(basindir).stem)] for basindir in basindirs]
-    if verbose:
-         print(labels)
+     ### SNOTEL extraction and point specification
+    labels, basindirs, gdf_metloom, sitenames = prep_basin_data(basin=basin, WY=wy, poly_fn=poly_fn, ST=state_abbrev,
+                                                                workdir=workdir, site_locs_fn=allsites_fn, verbose=verbose)
 
     extract_timeseries(basindirs, labels, basin, wy, gdf_metloom, sitenames, overwrite=overwrite, varname=varname, verbose=verbose)
 
