@@ -134,7 +134,7 @@ def calc_nwm_density(basin: str, WY: int, NWM_var: str = 'DENSITY', verbose: boo
     return nwm_ts_fn
 
 def calc_ua_density(basin: str, UA_var: str, WY: int, gdf_metloom: gpd.GeoDataFrame,
-                    use4k: bool = False, verbose: bool = True,
+                    sitenames: str, use4k: bool = False, verbose: bool = True,
                     ua_dir: str = '/uufs/chpc.utah.edu/common/home/skiles-group3/ancillary_sdswe_products/UA_SWE_depth'):
     """Calculate density from UA-extracted depth and SWE outputs produced with extract_ua_timeseries_point.py
     Parameters
@@ -274,7 +274,7 @@ def __main__():
 
     ### UA
     _ = calc_ua_density(basin=basin, UA_var=UA_var, use4k=False, WY=WY,
-                        gdf_metloom=gdf_metloom, verbose=verbose)
+                        gdf_metloom=gdf_metloom, sitenames=sitenames, verbose=verbose)
 
 if __name__ == "__main__":
     __main__()
