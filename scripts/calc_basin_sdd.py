@@ -2,31 +2,30 @@
 
 '''Script to calculate per-pixel snow disappearance date based on calc_sdd func in processing.py
 
-Usage: calc_basin_sdd.py basin_name 
+Usage: calc_basin_sdd.py basin_name
 
-# Defaults to calc_basin_sdd.py basin_name -t 10 <first water year detected, if multiple> <verbose>
-# TODO add WY input, verbose flag as args
+Defaults to calc_basin_sdd.py basin_name -t 10 <first water year detected, if multiple> <verbose>
+TODO add WY input, verbose flag as args
 '''
 
+import os
 import sys
 import glob
 import argparse
 
 from typing import List
 
-import numpy as np
 import pandas as pd
 import datetime
 
 import xarray as xr
 from pathlib import PurePath
 import copy
-import json 
+import json
 
 from tqdm import tqdm
 
 sys.path.append('/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/ucrb-isnobal/scripts/')
-import processing as proc
 
 def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
     """Match and sort filenames based on a regex pattern in specified directory
@@ -49,7 +48,7 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
     for f in glob.glob(thisDir + "/" + fn_pattern):
         fns.append(f)
     fns.sort()
-    if verbose: 
+    if verbose:
          print(fns)
     return fns
 
@@ -103,8 +102,8 @@ def calc_sdd(snow_property: pd.Series, alg: str = "threshold", day_thresh: int =
     Calculate snow disappearance date from a pandas series of a snow property (snow depth or SWE).
     The snow disappearance date is represented by the last date at which the first derivative is nonzero.
     The "threshold" method ignores spurious late season events defined by occasions when the snow property
-    is zero within a definable threshold (day_thresh) of preceding days. 
-    
+    is zero within a definable threshold (day_thresh) of preceding days.
+
     Parameters
     -------------
     snow_property: pandas.Series
@@ -118,7 +117,7 @@ def calc_sdd(snow_property: pd.Series, alg: str = "threshold", day_thresh: int =
         - number of lookback days to consider for the threshold algorithm, defaults to 10
     verbose: boolean
         print additional information, defaults to False
-    
+
     Returns
     -------------
         snow_all_gone_date: pd.Timestamp
@@ -136,7 +135,7 @@ def calc_sdd(snow_property: pd.Series, alg: str = "threshold", day_thresh: int =
     current_SDD = deriv_dates.index[-1] + pd.Timedelta(days=1)
 
     # Based on algorithm, determine snow all gone date
-    if verbose: 
+    if verbose:
         print(f'Algorithm: {alg}')
 
     if alg == "first":
@@ -151,7 +150,7 @@ def calc_sdd(snow_property: pd.Series, alg: str = "threshold", day_thresh: int =
         if verbose:
             print(f'Found snow all gone date: {snow_all_gone_date}')
     elif alg == "last":
-        # take the day after the last date where the first derivative is negative and 
+        # take the day after the last date where the first derivative is negative and
         snow_all_gone_date = current_SDD + datetime.timedelta(days=1)
         if verbose:
             print(f'Found snow all gone date: {snow_all_gone_date}')
@@ -164,7 +163,7 @@ def calc_sdd(snow_property: pd.Series, alg: str = "threshold", day_thresh: int =
         for f in range(-2, -len(deriv_dates), -1):
             preceding_date = deriv_dates.index[f]
 
-            # If any of the `day_thresh` days preceding the current_SDD hit a snow depth of zero, 
+            # If any of the `day_thresh` days preceding the current_SDD hit a snow depth of zero,
             # ==> this is a spurious late season event <==
             # change the current_SDD to the preceding date value and continue looping
             if (snow_property.loc[current_SDD - datetime.timedelta(days=day_thresh):current_SDD] == 0).any():
