@@ -63,18 +63,20 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
         print(fns)
     return fns
 
-def get_varnc(basin=None, indir=None, indate=None, templatefn=None, returnvar=None):
+def get_varnc(basin: str = None, indir: str = None, indate: str = None, templatefn: str = None, returnvar: str = None) -> List[str]:
     '''
     Obtains specified output files based on template file or basin and date.
 
-    Parameters:
-        basin (str): The name of the basin containing iSnobal runs (e.g., erw_newbasin_isnobal/). Default is None.
-        indir (str): The input directory containing daily runs (e.g., erw_newbasin_isnobal/wy2018/erw_newbasin/). Default is None.
-        indate (str): The input date in YYYYMMDD. Default is None.
-        templatefn (str): The template file name. Default is None.
-        returnvar (str): The variable to return. Default is None and returns all files.
+    Parameters
+    -----------
+        basin: The name of the basin containing iSnobal runs (e.g., erw_newbasin_isnobal/). Default is None.
+        indir: The input directory containing daily runs (e.g., erw_newbasin_isnobal/wy2018/erw_newbasin/). Default is None.
+        indate: The input date in YYYYMMDD. Default is None.
+        templatefn: The template file name. Default is None.
+        returnvar: The variable to return. Default is None and returns all files.
 
-    Returns:
+    Returns
+    -----------
         list: A list of output files based on the specified parameters.
 
     TODO:maybe remove basin and add returnvar handling for an input list
@@ -93,26 +95,30 @@ def get_varnc(basin=None, indir=None, indate=None, templatefn=None, returnvar=No
     else:
         return fn_list(datedir, f'{returnvar}.nc')
 
-def extract_ravel_varvals(ds, varname='thickness'):
+def extract_ravel_varvals(ds: xr.DataArray, varname: str = 'thickness') -> np.ndarray:
     '''Extract variable values from input DataArray.
 
-    Parameters:
-    ds (xarray.DataArray): Input DataArray containing the variable values.
-    varname (str, optional): Name of the variable to extract. Defaults to 'thickness'.
+    Parameters
+    -----------
+    ds: Input DataArray containing the variable values.
+    varname: Name of the variable to extract. Defaults to 'thickness'.
 
-    Returns:
-    numpy.ndarray: Flattened array of variable values.
+    Returns
+    -----------
+    Flattened array of variable values.
     '''
     return np.ravel(ds[varname].values)
 
-def extract_boxplot_vals(rav_arr):
+def extract_boxplot_vals(rav_arr: np.ndarray) -> tuple[float, float, float, float, float]:
     '''
     Extracts outlier thresholds, 25th percentile, 50th percentile, and 75th percentile from the given array.
 
-    Parameters:
-    rav_arr (numpy.ndarray): The input array from which the statistics will be extracted.
+    Parameters
+    -----------
+    rav_arr: The input array from which the statistics will be extracted.
 
-    Returns:
+    Returns
+    -----------
     tuple: A tuple containing the following values in order:
         - lowwhisk (float): The lower whisker threshold for outliers.
         - p25 (float): The 25th percentile value.
@@ -134,16 +140,18 @@ def extract_boxplot_vals(rav_arr):
 
     return lowwhisk, p25, p50, p75, highwhisk
 
-def fn2boxval(fn, varname='thickness'):
+def fn2boxval(fn: str, varname: str = 'thickness') -> List:
     '''
     Convert input filename (e.g., snow.nc) to boxplot values of specified variable value.
 
-    Parameters:
-        fn (str): The filename of the snow.nc file.
-        varname (str, optional): The name of the variable to extract values from. Defaults to 'thickness'.
+    Parameters
+    ----------
+        fn: The filename of the snow.nc file.
+        varname: The name of the variable to extract values from. Defaults to 'thickness'.
 
-    Returns:
-        list: The boxplot values of the specified variable value.
+    Returns
+    ----------
+        The boxplot values of the specified variable value.
     '''
     ds = xr.open_dataset(fn)
     raveled_vals = extract_ravel_varvals(ds, varname=varname)
@@ -151,16 +159,18 @@ def fn2boxval(fn, varname='thickness'):
 
     return boxvals
 
-def extract_dt(fn, inputvar="_snowdepth"):
+def extract_dt(fn: str, inputvar: str = "_snowdepth"):
     '''
     Extracts date from filename (ASO snow depth or swe) and stores it in the corresponding DataSet.
 
-    Args:
-        fn (str): The filename from which to extract the date.
-        inputvar (str, optional): The input variable to use for extraction.
+    Parameters
+    ----------
+        fn: The filename from which to extract the date.
+        inputvar: The input variable to use for extraction.
                                     Defaults to "_snowdepth". Change inputvar to '_swe' if using SWE files.
 
-    Returns:
+    Returns
+    ----------
         pd.DatetimeIndex: A pandas DatetimeIndex object representing the extracted date.
     '''
 
@@ -189,16 +199,18 @@ def extract_dt(fn, inputvar="_snowdepth"):
     dt = pd.to_datetime(df)
     return dt
 
-def assign_dt(ds, dt):
+def assign_dt(ds: xr.Dataset, dt: datetime) -> xr.Dataset:
     '''
     Assigns a datetime value to a new time dimension for the input dataset.
 
-    Parameters:
-        ds (xarray.Dataset): The input dataset.
-        dt (datetime): The date value to assign.
+    Parameters
+    ----------
+        ds: The input dataset.
+        dt: The date value to assign.
 
-    Returns:
-        xarray.Dataset: The dataset with the new time dimension assigned.
+    Returns
+    ----------
+        The dataset with the new time dimension assigned.
     '''
     ds = ds.expand_dims(time=dt)
     return ds
@@ -284,9 +296,18 @@ def calc_sdd(snow_property: pd.Series, alg: str = "threshold", day_thresh: int =
 
     return snow_all_gone_date, firstderiv
 
-def calc_doydiff(sdd_date_ds_list, varname='sdd_doy', xmas=359, ndv=-9999):
+def calc_doydiff(sdd_date_ds_list: List, varname: str = 'sdd_doy', xmas: int = 359, ndv: int = -9999) -> xr.DataArray:
     '''Calculate day difference of input list of SDD DOY datasets.
     Masks pre-set christmas (12/25) stand-in pixels as ndv
+    Parameters
+    ----------
+        sdd_date_ds_list: List of xarray datasets containing SDD DOY data.
+        varname: The name of the variable to calculate the difference for. Defaults to 'sdd_doy'.
+        xmas: Christmas stand-in for issues calculating values. Defaults to 359.
+        ndv: The no-data value to assign to the stand-in Christmas days. Defaults to -9999.
+    Returns
+    ----------
+        sdd_diff: The difference in SDD DOY between the two datasets.
     '''
     # Calculate SDD difference DataArray
     sdd_diff = sdd_date_ds_list[1][varname] - sdd_date_ds_list[0][varname]
@@ -302,18 +323,20 @@ def calc_doydiff(sdd_date_ds_list, varname='sdd_doy', xmas=359, ndv=-9999):
 
     return sdd_diff
 
-def calc_peak(snow_property, verbose=False, snow_name=None, units='m'):
+def calc_peak(snow_property: pd.Series, verbose: bool = False, snow_name: str = None, units: str = 'm') -> tuple[str, float]:
     '''
     Finds the date of the maximum snow value from a pandas series of snow depth or SWE.
 
-    Parameters:
-        snow_property (pandas.Series): A pandas series containing snow depth or SWE values.
-        verbose (bool, optional): If True, prints additional information. Defaults to False.
-        snow_name (str, optional): The name of the snow property. Defaults to None.
-        units (str, optional): The units of the snow property. Defaults to 'm'.
+    Parameters
+    ----------
+        snow_property: A pandas series containing snow depth or SWE values.
+        verbose: If True, prints additional information. Defaults to False.
+        snow_name: The name of the snow property. Defaults to None.
+        units: The units of the snow property. Defaults to 'm'.
 
-    Returns:
-        tuple: A tuple containing the peak date and the maximum value of the snow property.
+    Returns
+    ----------
+        A tuple containing the peak date and the maximum value of the snow property.
     '''
     # Determine date of maximum value in snow property
     peak_date = snow_property.idxmax()
@@ -329,56 +352,70 @@ def calc_peak(snow_property, verbose=False, snow_name=None, units='m'):
 
     return peak_date, max_val
 
-def locate_snotel_in_poly(poly_fn: str, site_locs_fn: str, buffer: int = 0):
+def locate_snotel_in_poly(poly_fn: str, site_locs_fn: str, buffer: int = 0, bbox: list = None, epsg: int = 32613) -> gpd.GeoDataFrame:
     '''
     Extract snotel sites located within a given polygon.
 
-    Args:
-        poly_fn (str): The filepath of the polygon.
-        site_locs_fn (str): The filepath of the snotel sites.
-        buffer (int): The buffer distance to pad the polygon geometry
+    Parameters
+    ----------
+        poly_fn: The filepath of the polygon.
+        site_locs_fn: The filepath of the snotel sites.
+        buffer: The buffer distance to pad the polygon geometry
 
-    Returns:
-        geopandas.GeoDataFrame: A geodataframe of snotel sites located within the polygon.
+    Returns
+    ----------
+        A geodataframe of snotel sites located within the polygon.
 
     Notes:
-        site_locs_fn:   EPSG 4326 /uufs/chpc.utah.edu/common/home/skiles-group3/SNOTEL/snotel_sites.json
-                        EPSG 32613 /uufs/chpc.utah.edu/common/home/skiles-group3/SNOTEL/snotel_sites_32613.json
-        poly_fn: '/uufs/chpc.utah.edu/common/home/skiles-group1/jmhu/ancillary/polys/yampa.shp'
+        site_locs_fn:   EPSG 4326 /uufs/chpc.utah.edu/common/home/skiles-group3/ancillary_sdswe_products/SNOTEL/snotel_sites.json
+                        EPSG 32613 /uufs/chpc.utah.edu/common/home/skiles-group3/ancillary_sdswe_products/SNOTEL/snotel_sites_32613.json
+        poly_fn: '/uufs/chpc.utah.edu/common/home/skiles-group3/jmhu/ancillary/polys/yampa.shp'
     '''
     sites_gdf = gpd.read_file(site_locs_fn)
-    poly_gdf = gpd.read_file(poly_fn)
-
-    # Merge geometries if multipart polygon
-    if len(poly_gdf.geometry) > 1:
-        poly_geom = unary_union(poly_gdf.geometry)
+    site_epsg = sites_gdf.crs.to_epsg()
+    print(site_epsg)
+    # Reproject sites to match input EPSG if they are not the same
+    if site_epsg != epsg:
+        sites_gdf = sites_gdf.to_crs(f'epsg:{epsg}')
+    if bbox is not None:
+        # pad the bbox by the buffer
+        bbox = [bbox[0] - buffer, bbox[1] - buffer, bbox[2] + buffer, bbox[3] + buffer]
+        # extract sites within bbox
+        poly_sites = sites_gdf.cx[bbox[0]:bbox[2], bbox[1]:bbox[3]]
     else:
-        poly_geom = poly_gdf.iloc[0].geometry
+        poly_gdf = gpd.read_file(poly_fn)
 
-    # Buffer this polygon geometry
-    poly_geom = poly_geom.buffer(distance=buffer)
+        # Merge geometries if multipart polygon
+        if len(poly_gdf.geometry) > 1:
+            poly_geom = unary_union(poly_gdf.geometry)
+        else:
+            poly_geom = poly_gdf.iloc[0].geometry
 
-    # Check if sites are located within polygon
-    idx = sites_gdf.intersects(poly_geom)
+        # Buffer this polygon geometry
+        poly_geom = poly_geom.buffer(distance=buffer)
 
-    # Extract sites located within polygon
-    poly_sites = sites_gdf.loc[idx]
+        # Check if sites are located within polygon
+        idx = sites_gdf.intersects(poly_geom)
+
+        # Extract sites located within polygon
+        poly_sites = sites_gdf.loc[idx]
 
     return poly_sites
 
-def get_nwm_retrospective_LDAS(site_gdf, start=None, end=None, var='SNOWH'):
+def get_nwm_retrospective_LDAS(site_gdf: gpd.GeoDataFrame, start: str = None, end: str = None, var: str = 'SNOWH') -> List[xr.Dataset]:
     '''
     Retrieves NWM retrospective LDAS (NoahMP land surface model output) data for a given site or sites.
     See list of available variables here https://docs.opendata.aws/noaa-nwm-pds/readme.html
-    Parameters:
-        site_gdf (GeoDataFrame): A GeoDataFrame containing the site locations.
-        start (str, optional): The start date of the data to retrieve. Defaults to None. Format: YYYY-MM-DD
-        end (str, optional): The end date of the data to retrieve. Defaults to None. Format: YYYY-MM-DD
-        var (str, optional): The variable to retrieve. Defaults to snow depth 'SNOWH', SNEQV and others also available
+    Parameters
+    ----------
+        site_gdf: A GeoDataFrame containing the site locations.
+        start: The start date of the data to retrieve. Defaults to None. Format: YYYY-MM-DD
+        end: The end date of the data to retrieve. Defaults to None. Format: YYYY-MM-DD
+        var: The variable to retrieve. Defaults to snow depth 'SNOWH', SNEQV and others also available
 
-    Returns:
-        list: A list of xarray Datasets containing the retrieved data for each input site.
-
+    Returns
+    ----------
+        A list of xarray Datasets containing the retrieved data for each input site.
     '''
     bucket = 's3://noaa-nwm-retrospective-3-0-pds/CONUS/zarr'
     fs = S3FileSystem(anon=True)
@@ -395,19 +432,23 @@ def get_nwm_retrospective_LDAS(site_gdf, start=None, end=None, var='SNOWH'):
 
     return ds_list
 
-def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH', return_meta=False):
+def get_snotel(sitenum: List[int], sitename: List[str], ST: List[str], WY: List, epsg: int = 32613, snowvar: str = 'SNOWDEPTH', return_meta: bool = False) -> tuple:
     '''Use metloom to pull snotel coordinates and return as geodataframe and daily data as dict of dataframes
     valid snow variables: SNOWDEPTH, SWE
     WY can be a single year or a list of years
     snowvar can be SNOWDEPTH, SWE, otherwise defaults to both
-    Parameters:
-        sitenum (list): list of snotel site numbers
-        sitename (list): list of snotel site names
-        ST (list): list of state abbreviations
-        WY (int or list): water year or list of water years
-        epsg (int): epsg code for UTM zone, defaults to 32613
-        snowvar (str): snow variable to pull, 'SNOWDEPTH' or 'SWE', defaults to 'SNOWDEPTH'
-        return_meta (bool): return metadata dataframes, defaults to False
+    Parameters
+    ----------
+        sitenum: list of snotel site numbers
+        sitename: list of snotel site names
+        ST: list of state abbreviations
+        WY: water year or list of water years
+        epsg: epsg code for UTM zone, defaults to 32613
+        snowvar: snow variable to pull, 'SNOWDEPTH', 'SWE', otherwise pulls both. Defaults to 'SNOWDEPTH'
+        return_meta: return metadata dataframes, defaults to False
+    Returns
+    ----------
+        Geodataframe of site geometry, list of dataframes of data values, (list of dataframes for metadata about snotel sites)
     '''
     # start and end date, adjust for list of water years
     if type(WY) is list:
@@ -476,11 +517,25 @@ def get_snotel(sitenum, sitename, ST, WY, epsg=32613, snowvar='SNOWDEPTH', retur
     else:
         return gdf, snotel_dfs
 
-def bin_elev(dem, basinname, equal_spacing=True, p=10, verbose=False, plot_on=True,
-             cmap='viridis', figsize=(4, 6), title='elevation binned'
-            ):
+def bin_elev(dem: xr.DataArray, basinname: str, equal_spacing: bool = True, p: int = 10, verbose: bool = False, plot_on: bool = True,
+             cmap: str = 'viridis', figsize: tuple = (4, 6), title: str = 'elevation binned') -> tuple[xr.DataArray, dict]:
     """Bin elevation based on p equally spaced bins or percent spacing
     (which should split into equivalent areas of the watershed)
+    Parameters
+    ----------
+        dem: Digital elevation model (DEM) data.
+        basinname: Name of the basin.
+        equal_spacing: If True, use equally spaced bins. Defaults to True.
+        p: Number of bins to create. Defaults to 10.
+        verbose: If True, print additional information. Defaults to False.
+        plot_on: If True, plot the binned elevation. Defaults to True.
+        cmap: Colormap to use for plotting. Defaults to 'viridis'.
+        figsize: Size of the plot. Defaults to (4, 6).
+        title: Title of the plot. Defaults to 'elevation binned'.
+    Returns
+    ----------
+        dem_bin: Binned elevation data.
+        dem_elev_ranges: Dictionary of elevation ranges for each bin.
     """
     #TODO Add standard deviation/other measure of spread around the mean
     #TODO Add day range of means - e.g., north vs. south
@@ -536,10 +591,22 @@ def bin_elev(dem, basinname, equal_spacing=True, p=10, verbose=False, plot_on=Tr
 
     return dem_bin, dem_elev_ranges
 
-def bin_slope(slope, basinname, plot_on=True,
-             cmap='viridis', figsize=(4, 6), title='slope binned'
+def bin_slope(slope: xr.DataArray, basinname: str, plot_on: bool = True,
+             cmap: str = 'viridis', figsize: tuple = (4, 6), title: str = 'slope binned'
             ):
-    """Bin input slope array based on pre-determined classes"""
+    """Bin input slope array based on pre-determined classes
+    Parameters
+    ----------
+        slope: Slope data.
+        basinname: Name of the basin.
+        plot_on: If True, plot the binned slope. Defaults to True.
+        cmap: Colormap to use for plotting. Defaults to 'viridis'.
+        figsize: Size of the plot. Defaults to (4, 6).
+        title: Title of the plot. Defaults to 'slope binned'.
+    Returns
+    ----------
+        slope_bin: Binned slope data.
+    """
     title = f'{basinname} {title}'
     # Bin slope
     slope_bin = copy.deepcopy(slope)
@@ -563,9 +630,21 @@ def bin_slope(slope, basinname, plot_on=True,
 
     return slope_bin
 
-def bin_aspect(aspect, basinname, aspect_labels = ['North', 'East', 'South', 'West'],
-               plot_on=True, cmap='plasma_r', figsize=(4, 6), title=f'aspect binned'):
+def bin_aspect(aspect: xr.DataArray, basinname: str, aspect_labels: List[str] = ['North', 'East', 'South', 'West'],
+               plot_on: bool = True, cmap: str = 'plasma_r', figsize: tuple = (4, 6), title: str = 'aspect binned') -> xr.DataArray:
     """Bin input aspect array based on pre-determined classes
+    Parameters
+    ----------
+        aspect: Aspect data.
+        basinname: Name of the basin.
+        aspect_labels: List of labels for each aspect bin. Defaults to ['North', 'East', 'South', 'West'].
+        plot_on: If True, plot the binned aspect. Defaults to True.
+        cmap: Colormap to use for plotting. Defaults to 'plasma_r'.
+        figsize: Size of the plot. Defaults to (4, 6).
+        title: Title of the plot. Defaults to 'aspect binned'.
+    Returns
+    ----------
+        aspect_crop_rosebin: Binned aspect data.
     """
     #TODO Add standard deviation/other measure of spread around the mean
     # TODO Add day range of means - e.g., north vs. south
