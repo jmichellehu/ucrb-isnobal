@@ -12,7 +12,6 @@ import argparse
 from typing import List
 
 import pandas as pd
-# import datetime
 
 import xarray as xr
 from pathlib import PurePath
@@ -97,7 +96,7 @@ def calc_peak(snow_property: pd.Series, verbose: bool = False, snow_name: str = 
 
 def calculate_peak_date(basindirs, wydir, wy, verbose=True,
                         thisvar='thickness', varname='depth', varfile='snow.nc',
-                        drop_var_list = ['snow_density', 'specific_mass', 'liquid_water', 'temp_surf',
+                        drop_var_list = ['thickness', 'snow_density', 'specific_mass', 'liquid_water', 'temp_surf',
                                          'temp_lower', 'temp_snowcover', 'thickness_lower',
                                          'water_saturation', 'projection']):
     """Calculate peak date and day of year of input snow property  using processing.py calc_peak() func.
@@ -117,6 +116,10 @@ def calculate_peak_date(basindirs, wydir, wy, verbose=True,
         missing_dt_dict: dictionary of missing peak snow dates and pixel indices
         peak_date_ds: xarray dataset containing peak date and day of year of input snow property
     """
+    # Amend drop_var_list depending on the snow property
+    # (Keep all but the variable in the list of variables to drop)
+    drop_var_list = [var for var in drop_var_list if var != thisvar]
+
     # Load the snow data
     ds_concat_list = [xr.open_mfdataset(f'{basindir}*/{varfile}', decode_coords="all", drop_variables=drop_var_list).load() for basindir in basindirs]
 
@@ -155,6 +158,7 @@ def calculate_peak_date(basindirs, wydir, wy, verbose=True,
             print('Storing missing list in dict')
         # enter the missing_list into a dict using the basindir stems as keys
         missing_dt_dict[PurePath(basindirs[0]).stem] = missing_list
+
         peak_ds.data = peak_arr
 
         # Update var name
@@ -229,13 +233,13 @@ def __main__():
     basindirs, wydir = get_dirs_filenames(basin, WY, verbose=verbose)
 
     print('Load snow data and calculate peak snow date')
-    ending = f'WY{WY}'
     # Calculate the per-pixel snow date
     missing_peak_dict, _ = calculate_peak_date(basindirs, wydir, wy=WY, verbose=verbose,
                                                thisvar=thisvar, varname=varname, varfile=varfile)
 
     print('Write out to json')
     # Dump missing snow date dictionary to json file
+    ending = f'_WY{WY}'
     with open(f'{wydir}/missing_peak_dict{ending}.json', 'w') as fp:
         json.dump(missing_peak_dict, fp)
 
