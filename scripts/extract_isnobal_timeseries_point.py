@@ -41,7 +41,7 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
 def prep_basin_data(basin: str, WY: List, poly_fn: str, ST: str, workdir: str, site_locs_fn: str, epsg: int = 32613, verbose: bool = False):
     """Prepare basin snotel data and directories for processing"""
     # Locate SNOTEL sites within basin
-    found_sites = proc.locate_snotel_in_poly(poly_fn=poly_fn, site_locs_fn=site_locs_fn)
+    found_sites = proc.locate_snotel_in_poly(poly_fn=poly_fn, site_locs_fn=site_locs_fn, buffer=200)
 
     # Get site names and site numbers
     sitenames = found_sites['site_name']
@@ -50,7 +50,7 @@ def prep_basin_data(basin: str, WY: List, poly_fn: str, ST: str, workdir: str, s
         print(sitenames)
 
     ST_arr = [ST] * len(sitenums)
-    gdf_metloom, _ = proc.get_snotel(sitenums, sitenames, ST_arr, WY=WY)
+    gdf_metloom, _ = proc.get_snotel(sitenums, sitenames, ST_arr, WY=WY, epsg=epsg)
 
     # Get the basin directories based on input wy
     basindirs = fn_list(workdir, f'{basin}*/wy{WY}/{basin}*/')
@@ -73,6 +73,35 @@ def prep_basin_data(basin: str, WY: List, poly_fn: str, ST: str, workdir: str, s
          print(labels)
 
     return labels, basindirs, gdf_metloom, sitenames
+
+def modify_site_locs(poly_fn, site_locs_fn, epsg='32613', outepsg=None, verbose=False):
+    """Modify site locations to match the basin projection"""
+    if outepsg is None:
+        try:
+             # From the shp file, get the correct epsg
+             poly_gdf = gpd.read_file(poly_fn)
+             outepsg = poly_gdf.crs.to_epsg()
+             if verbose:
+                print(outepsg)
+        except FileNotFoundError:
+            print(f"No output EPSG provided or found in {poly_fn}, exiting...")
+            sys.exit(1)
+    outname = f'{site_locs_fn.split(epsg)[0]}{outepsg}.json'
+
+    # Check to see if this file exists
+    if not os.path.exists(outname):
+        # Load the SNOTEL sites file
+        all_sites_gdf = gpd.read_file(site_locs_fn)
+
+        # Reproject to the basin projection
+        all_sites_gdf_out = all_sites_gdf.to_crs(f'EPSG:{outepsg}')
+
+        # Save to file if this does not exist
+        if verbose:
+            print('Writing {outname} to file...')
+        all_sites_gdf_out.to_file(outname)
+
+    return outname, outepsg
 
 def extract_timeseries(basindirs: list, labels: list, basin: str,
                        wy: str, gdf_metloom: gpd.GeoDataFrame,
@@ -223,15 +252,21 @@ def __main__():
     ancillary_dir = '/uufs/chpc.utah.edu/common/home/skiles-group3/ancillary_sdswe_products/'
 
     # Set up filename for all active SNOTEL sites
-    allsites_fn = f'{ancillary_dir}/{sitelocs}'
+    site_locs_fn = f'{ancillary_dir}/{sitelocs}'
 
     if poly_fn is None:
         poly_dir = '/uufs/chpc.utah.edu/common/home/skiles-group3/jmhu/ancillary/polys'
         poly_fn = fn_list(poly_dir, f'*{basin}*shp')[0]
+        poly_gdf = gpd.read_file(poly_fn)
+        epsg = poly_gdf.crs.to_epsg()
+    else:
+        print(f'Detected input shapefile: {poly_fn}')
+        site_locs_fn, epsg = modify_site_locs(poly_fn, site_locs_fn=site_locs_fn, epsg='32613')
+        print(f'Detected EPSG is {epsg}')
 
      ### SNOTEL extraction and point specification
-    labels, basindirs, gdf_metloom, sitenames = prep_basin_data(basin=basin, WY=wy, poly_fn=poly_fn, ST=state_abbrev,
-                                                                workdir=workdir, site_locs_fn=allsites_fn, verbose=verbose)
+    labels, basindirs, gdf_metloom, sitenames = prep_basin_data(basin=basin, WY=wy, poly_fn=poly_fn, ST=state_abbrev, epsg=epsg,
+                                                                workdir=workdir, site_locs_fn=site_locs_fn, verbose=verbose)
 
     extract_timeseries(basindirs, labels, basin, wy, gdf_metloom, sitenames, overwrite=overwrite, varname=varname, verbose=verbose)
 
