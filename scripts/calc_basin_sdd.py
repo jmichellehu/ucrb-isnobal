@@ -28,22 +28,18 @@ from tqdm import tqdm
 sys.path.append('/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/ucrb-isnobal/scripts/')
 
 def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
-    """Match and sort filenames based on a regex pattern in specified directory
+    '''Match and sort filenames based on a regex pattern in specified directory
 
     Parameters
-    -------------
-    thisDir: str
-        directory path to search
-    fn_pattern: str
-        regex pattern to match files
-    verbose: boolean
-        print filenames
-    
+    ----------
+        thisDir: directory path to search
+        fn_pattern: regex pattern to match files
+        verbose: print filenames
+
     Returns
-    -------------
-    fns: list
-        list of filenames matched and sorted
-    """
+    ----------
+        fns: list of filenames matched and sorted
+    '''
     fns = []
     for f in glob.glob(thisDir + "/" + fn_pattern):
         fns.append(f)
@@ -52,15 +48,24 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
          print(fns)
     return fns
 
-def get_dirs_filenames(basin, varfile='snow.nc', verbose=True, res=100,
-                           workdir='/uufs/chpc.utah.edu/common/home/skiles-group3/model_runs/'):
-    '''Find basin directories, water year and list of daily snow.nc files for each model run'''
-    basindirs = fn_list(workdir, f'{basin}*/*/{basin}*{res}*/')
-    if verbose: 
-        [print(b) for b in basindirs]
+def get_dirs_filenames(basin: str, WY:int, verbose: bool = False, res: int = 100,
+                           workdir: str = '/uufs/chpc.utah.edu/common/home/skiles-group3/model_runs/'):
+    '''Find basin directories and water year directory for each model run
 
-    # Get the WY from the directory name
-    WY = int(PurePath(basindirs[0]).parents[0].stem.split('wy')[-1])
+    Parameters
+    ----------
+        basin: basin name
+        WY: water year
+        verbose: print filenames
+        res: model resolution
+        workdir: model run directory
+
+    Returns
+    ----------
+        basindirs: list of basin directories
+        wydir: water year directory
+    '''
+    basindirs = fn_list(workdir, f'{basin}*/*/{basin}*{res}*/')
     if verbose:
         print(WY)
 
@@ -106,24 +111,19 @@ def calc_sdd(snow_property: pd.Series, alg: str = "threshold", day_thresh: int =
 
     Parameters
     -------------
-    snow_property: pandas.Series
-        snow depth or SWE (measurement units in meters)
-    alg: str
-        algorithm to use for snow all gone date calculation
+    snow_property: snow depth or SWE (measurement units in meters)
+    alg: algorithm to use for snow all gone date calculation
         - "first": first date where snow property hits zero after the maximum value
         - "last": last date where snow property hits zero after the maximum value
         - "threshold": last date where the first derivative of snow property is negative for a definable threshold
-    day_thresh: int
-        - number of lookback days to consider for the threshold algorithm, defaults to 10
+    day_thresh: number of lookback days to consider for the threshold algorithm, defaults to 10
     verbose: boolean
         print additional information, defaults to False
 
     Returns
     -------------
-        snow_all_gone_date: pd.Timestamp
-            date at which the snow property disappears
-        firstderiv: pd.Series
-            first derivative of the snow property
+        snow_all_gone_date: date at which the snow property disappears
+        firstderiv: first derivative of the snow property
     '''
     # Calculate first derivative of snow property
     firstderiv = snow_property.diff() / snow_property.index.to_series().diff().dt.total_seconds()
@@ -178,7 +178,11 @@ def calc_sdd(snow_property: pd.Series, alg: str = "threshold", day_thresh: int =
 
     return snow_all_gone_date, firstderiv
 
-def calculate_sdd(basindirs, ending, wydir, wy, ds_concat_list, verbose=True, alg='first'):
+def calculate_sdd(basindirs: List[str], wydir: str, wy: int, verbose: bool = True, alg: str= 'first',
+                        thisvar: str= 'thickness', varname: str= 'depth', varfile: str= 'snow.nc',
+                        drop_var_list: List[str] = ['snow_density', 'specific_mass', 'liquid_water', 'temp_surf',
+                                                    'temp_lower', 'temp_snowcover', 'thickness_lower',
+                                                    'water_saturation', 'projection']) -> tuple[dict, xr.Dataset]:
         '''Calculate snow disappearance date and day of year using processing.py calc_sdd() func.
         Generate dictionary of missing snow disappearance dates and pixel indices with basin model run type as dict key.'''
         missing_sdd_dict = dict()
