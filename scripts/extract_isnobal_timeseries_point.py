@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 '''
-This script extracts modeled snow depth or snow density timeseries data at identified SNOTEL sites within a basin
+This script extracts modeled snow depth, density, or water equivalent timeseries data at identified SNOTEL sites within a basin
 and outputs as csv files.
 '''
 import sys
@@ -124,7 +124,11 @@ def extract_timeseries(basindirs: list, labels: list, basin: str,
                                 'temp_snowcover', 'thickness_lower',
                                 'water_saturation', 'projection']
                 thisvar = 'specific_mass'
-                mult = 1000
+            elif varname == 'all':
+                drop_var_list = ['liquid_water', 'temp_surf', 'temp_lower',
+                                'temp_snowcover', 'thickness_lower',
+                                'water_saturation', 'projection']
+                thisvar = ['thickness', 'snow_density', 'specific_mass']
             else:
                 print("Variable not recognized, exiting...")
                 sys.exit(1)
@@ -199,7 +203,7 @@ def parse_arguments():
         parser.add_argument('-loc', '--sitelocs', type=str, help='json file of point locations',
                             default='SNOTEL/snotel_sites_32613.json')
         parser.add_argument('-var', '--variable', type=str, help='iSnobal snow variable',
-                            choices=['depth', 'density', 'swe'], default='depth')
+                            choices=['depth', 'density', 'swe', 'all'], default='depth')
         parser.add_argument('-o', '--overwrite', help='Overwrite existing files', default=False)
         parser.add_argument('-v', '--verbose', help='Print filenames', default=True)
         return parser.parse_args()
