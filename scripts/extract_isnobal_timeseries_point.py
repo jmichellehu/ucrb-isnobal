@@ -22,17 +22,13 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
 
     Parameters
     -------------
-    thisDir: str
-        directory path to search
-    fn_pattern: str
-        regex pattern to match files
-    verbose: boolean
-        print filenames
+    thisDir: directory path to search
+    fn_pattern: regex pattern to match files
+    verbose: print filenames
 
     Returns
     -------------
-    fns: list
-        list of filenames matched and sorted
+    fns: list of filenames matched and sorted
     """
     fns = []
     for f in glob.glob(thisDir + "/" + fn_pattern):
@@ -42,7 +38,7 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
          print(fns)
     return fns
 
-def prep_basin_data(basin, WY, poly_fn, ST, workdir, site_locs_fn, verbose):
+def prep_basin_data(basin: str, WY: List, poly_fn: str, ST: str, workdir: str, site_locs_fn: str, epsg: int = 32613, verbose: bool = False):
     """Prepare basin snotel data and directories for processing"""
     # Locate SNOTEL sites within basin
     found_sites = proc.locate_snotel_in_poly(poly_fn=poly_fn, site_locs_fn=site_locs_fn)
@@ -80,27 +76,26 @@ def prep_basin_data(basin, WY, poly_fn, ST, workdir, site_locs_fn, verbose):
 
 def extract_timeseries(basindirs: list, labels: list, basin: str,
                        wy: str, gdf_metloom: gpd.GeoDataFrame,
-                       sitenames: list, overwrite: bool = False, verbose: bool = True,
-                       chunks='auto', month='run20',
-                       varname='depth'
+                       sitenames: list, varname: str = 'all',
+                       method: str = 'nearest',
+                       chunks: str = 'auto', month: str = 'run20',
+                       overwrite: bool = False, verbose: bool = True,
                        ):
             """
             Extracts timeseries data for a given variable and sites based on input
             geodataframe from a list of netcdf files and writes to csv
             Parameters
             -------------
-            basindirs: list
-                list of basin directories
-            labels: list
-                list of short names for model runs
-            gdf_metloom: geodataframe
-                geodataframe of SNOTEL sites
-            sitenames: list
-                list of SNOTEL site names
-            model_ts_fn: str
-                output csv filename
-            verbose: boolean
-                print filenames
+            basindirs: list of basin directories
+            labels: of short names for model runs
+            gdf_metloom: geodataframe of SNOTEL sites
+            sitenames: list of SNOTEL site names
+            varname: variable name to extract ['depth', 'density', 'swe', or 'all'], defaults to all
+            method: method for extracting/resampling data, defaults to 'nearest'
+            chunks: chunk size for xarray, defaults to 'auto'
+            month: dir pattern to search for snow.nc files, defaults to 'run20'
+            overwrite: flag to overwrite existing files, defaults to False
+            verbose: flag to print filenames
 
             Returns
             -------------
@@ -136,62 +131,66 @@ def extract_timeseries(basindirs: list, labels: list, basin: str,
             for kdx, (label, basindir) in enumerate(zip(labels, basindirs)):
                 print(kdx, label)
                 outdir = PurePath(basindir).parents[0].as_posix()
-                outfn = f'{basin}_{label}_{thisvar}_snotelmetloom_wy{wy}.csv'
-                model_ts_fn = f'{outdir}/{outfn}'
-                if verbose:
-                    print(model_ts_fn)
+                if type(thisvar) is not list:
+                     thisvar = [thisvar]
+                for v in thisvar:
+                    print(v)
+                    outfn = f'{basin}_{label}_{v}_snotelmetloom_wy{wy}.csv'
+                    model_ts_fn = f'{outdir}/{outfn}'
+                    if verbose:
+                        print(model_ts_fn)
 
-                # Default - do not overwrite files
-                if os.path.exists(model_ts_fn) and not overwrite:
-                    print(f"{model_ts_fn} exists, skipping!")
-                elif os.path.exists(model_ts_fn) and overwrite:
-                    print(f"{model_ts_fn} exists, but overwrite flag on, re-calculating...")
-                else:
-                    print("^^DNE, calculating...")
-                days = dict()
-                # this is file name, it contains depth and density
-                basin_days = fn_list(basindir, f"{month}*/snow.nc")
-                days[label] = basin_days
-                if verbose:
-                    print(len(basin_days))
+                    # Default - do not overwrite files
+                    if os.path.exists(model_ts_fn) and not overwrite:
+                        print(f"{model_ts_fn} exists, skipping!")
+                        continue
+                    else:
+                        if os.path.exists(model_ts_fn) and overwrite:
+                            print(f"{model_ts_fn} exists, but overwrite flag on, re-calculating...")
+                        else:
+                            print("^^DNE, calculating...")
+                        days = dict()
+                        # this is file name, it contains depth and density
+                        basin_days = fn_list(basindir, f"{month}*/snow.nc")
+                        days[label] = basin_days
+                        if verbose:
+                            print(len(basin_days))
 
-                ds_dict = dict()
+                        ds_dict = dict()
 
-                # extract the snow state variables for the selected sites
-                ds_list = [xr.open_dataset(day_fn, chunks=chunks, drop_variables=drop_var_list) for day_fn in days[label]]
+                        # extract the snow state variables for the selected sites
+                        ds_list = [xr.open_dataset(day_fn, chunks=chunks, drop_variables=drop_var_list) for day_fn in days[label]]
 
-                # Nearest neighbor selection, may build in buffered radius option in the future
-                snow_var_data = [ds[thisvar].sel(x=list(gdf_metloom.geometry.x.values),
-                                                y=list(gdf_metloom.geometry.y.values), method='nearest') for ds in ds_list]
-                snow_var_data = xr.concat(snow_var_data, dim='time')
-                ds_dict[f'{label}_{thisvar}'] = snow_var_data
+                        # Nearest neighbor selection, may build in different options in the future
+                        snow_var_data = [ds[v].sel(x=list(gdf_metloom.geometry.x.values),
+                                                        y=list(gdf_metloom.geometry.y.values), method=method) for ds in ds_list]
+                        snow_var_data = xr.concat(snow_var_data, dim='time')
+                        ds_dict[f'{label}_{v}'] = snow_var_data
 
-                # Turn these into dataframes and write to csvs
-                basin_dict = dict()
-                for jdx, sitename in enumerate(sitenames):
-                    ds = ds_dict[f'{label}_{thisvar}'][:, jdx, jdx]
-                    basin_dict[sitename] = ds.values
+                        # Turn these into dataframes and write to csvs
+                        basin_dict = dict()
+                        for jdx, sitename in enumerate(sitenames):
+                            ds = ds_dict[f'{label}_{v}'][:, jdx, jdx]
+                            basin_dict[sitename] = ds.values
 
-                # Turn it into a dataframe
-                basin_df = pd.DataFrame(basin_dict, index=ds['time'].values)
+                        # Turn it into a dataframe
+                        basin_df = pd.DataFrame(basin_dict, index=ds['time'].values)
 
-                # Adjust units for SWE, need to divide by 1000 to convert from mm to m
-                if varname == 'swe':
-                    basin_df = basin_df / mult
+                        # Adjust units for SWE, need to divide by 1000 to convert from mm to m
+                        if v == 'specific_mass':
+                            basin_df = basin_df / 1000
 
-                if verbose:
-                    print(f'Saving to {model_ts_fn}')
+                        if verbose:
+                            print(f'Saving to {model_ts_fn}')
 
-                # Save the the dataframe as csv for easy access later
-                basin_df.to_csv(model_ts_fn)
+                        # Save the the dataframe as csv for easy access later
+                        basin_df.to_csv(model_ts_fn)
 
 def parse_arguments():
         """Parse command line arguments.
 
         Returns:
-        ----------
-        argparse.Namespace
-            Parsed command line arguments.
+        argparse.Namespace: Parsed command line arguments.
         """
         parser = argparse.ArgumentParser(description='Extract iSnobal model output snow variable\
                                          ["depth" (thickness), "density", or "swe"] at point sites [SNOTEL]\
