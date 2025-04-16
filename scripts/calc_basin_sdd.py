@@ -67,7 +67,7 @@ def get_dirs_filenames(basin: str, WY:int, verbose: bool = False, res: int = 100
     '''
     basindirs = fn_list(workdir, f'{basin}*/*/{basin}*{res}*/')
     if verbose:
-        print(WY)
+        [print(b) for b in basindirs]
 
     # Update basindirs for the selected water year
     basindirs = fn_list(workdir, f'{basin}*/*{WY}/{basin}*{res}*/')
@@ -190,17 +190,19 @@ def calculate_sdd(basindirs: List[str], wydir: str, wy: int, verbose: bool = Tru
             # Create an empty dataset of the same x and y dims to store the SDD values
             sdd_ds = copy.deepcopy(ds.isel(time=0))
             sdd_arr = sdd_ds.data
-            print(sdd_arr.shape)
+            if verbose:
+                print(sdd_arr.shape)
 
             # Create and empty list for keeping track of missing sdd pixels
             missing_list = []
 
-            print('Begin looping...')
+            if verbose:
+                print('Begin looping...')
             # fill the array with the sdd value if calculable
             for i in tqdm(range(sdd_ds.x.size)):
                 for j in range(sdd_ds.y.size):
                     try:
-                        sdd, _ = calc_sdd(ds[:,j,i].to_series(), alg=alg, verbose=verbose)
+                        sdd, _ = calc_sdd(ds[:,j,i].to_series(), alg=alg, verbose=False)
                     except Exception as e:
                         e.add_note(f"Something wrong with SDD extract for {i, j}")
                         # store the pixel where sdd extraction is an issue
@@ -211,7 +213,8 @@ def calculate_sdd(basindirs: List[str], wydir: str, wy: int, verbose: bool = Tru
 
                     sdd_arr[j, i] = sdd.timestamp()
 
-            print('Storing missing list in dict')
+            if verbose:
+                print('Storing missing list in dict')
             # enter the missing_list into a dict using the basindir stems as keys
             missing_sdd_dict[PurePath(basindirs[0]).stem] = missing_list
 
@@ -226,10 +229,12 @@ def calculate_sdd(basindirs: List[str], wydir: str, wy: int, verbose: bool = Tru
             sdd_date_ds = sdd_ds.to_dataset()
             # Convert to datetime to access .dt.dayofyear for DOY calc
             # Needs to be in seconds, put up with nanosecond precision warning
-            print('Converting SDD type to datetime64')
+            if verbose:
+                print('Converting SDD type to datetime64')
             sdd_date_ds['sdd'] = sdd_date_ds['sdd'].astype('datetime64[s]')
 
-            print('Calculating DOY')
+            if verbose:
+                print('Calculating DOY')
             # Calculate Day of year
             sdd_date_ds['sdd_doy'] = sdd_date_ds['sdd'].dt.dayofyear
 
@@ -243,15 +248,22 @@ def calculate_sdd(basindirs: List[str], wydir: str, wy: int, verbose: bool = Tru
             sdd_date_ds['sdd_doy'].attrs = dict(units='day of year', 
                                                 description='snow disappearance day of year for each pixel in the domain')
 
-            outname = f'{wydir}/{PurePath(basindir).stem}_sdd_{ending}_{alg}.nc'
-            print(f'Writing out netcdf...\n{outname}')
+            outname = f'{wydir}/{PurePath(basindir).stem}_sdd_{varname}_wy{wy}_{alg}.nc'
+            if verbose:
+                print(f'Writing out netcdf...\n{outname}')
             # write this out
             sdd_date_ds.to_netcdf(f'{outname}')
         
         return missing_sdd_dict
 
-def __main__():
-    # Parse command line args
+        return missing_sdd_dict, sdd_date_ds
+
+def parse_arguments():
+    """Parse command line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed command line arguments.
+    """
     parser = argparse.ArgumentParser(description='Basin-wide snow disappearance calculation')
     parser.add_argument('basin', type=str, help='name of basin')
     args = parser.parse_args()
