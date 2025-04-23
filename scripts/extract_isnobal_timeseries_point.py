@@ -11,7 +11,7 @@ import argparse
 import pandas as pd
 import geopandas as gpd
 from pathlib import PurePath
-from typing import List
+from typing import List, Tuple, Optional
 import xarray as xr
 
 sys.path.append('/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/ucrb-isnobal/scripts/')
@@ -38,7 +38,8 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
          print(fns)
     return fns
 
-def prep_basin_data(basin: str, WY: List, poly_fn: str, ST: str, workdir: str, site_locs_fn: str, epsg: int = 32613, verbose: bool = False):
+def prep_basin_data(basin: str, WY: List, poly_fn: str, ST: str, workdir: str, site_locs_fn: str,
+                    epsg: int = 32613, filter_on: Optional[int] = None, verbose: bool = False) -> Tuple[str, str, gpd.GeoDataFrame, str]:
     """Prepare basin snotel data and directories for processing"""
     # Locate SNOTEL sites within basin
     found_sites = proc.locate_snotel_in_poly(poly_fn=poly_fn, site_locs_fn=site_locs_fn, buffer=200)
@@ -50,9 +51,13 @@ def prep_basin_data(basin: str, WY: List, poly_fn: str, ST: str, workdir: str, s
         print(sitenames)
 
     ST_arr = [ST] * len(sitenums)
+    if verbose:
+        print('Using metloom to extract SNOTEL data...')
     gdf_metloom, _ = proc.get_snotel(sitenums, sitenames, ST_arr, WY=WY, epsg=epsg)
 
     # Get the basin directories based on input wy
+    if verbose:
+        print('Finding basin directories...')
     basindirs = fn_list(workdir, f'{basin}*/wy{WY}/{basin}*/')
 
     # Based on the basindirs, generate a dict
@@ -130,6 +135,8 @@ def extract_timeseries(basindirs: list, labels: list, basin: str,
             -------------
             None
             """
+            if verbose:
+                print(varname)
             if varname == 'depth':
                 drop_var_list=['snow_density', 'specific_mass',
                                'liquid_water', 'temp_surf', 'temp_lower',
@@ -255,6 +262,8 @@ def __main__():
     site_locs_fn = f'{ancillary_dir}/{sitelocs}'
 
     if poly_fn is None:
+        if verbose:
+            print('No shapefile provided, using default detection...')
         poly_dir = '/uufs/chpc.utah.edu/common/home/skiles-group3/jmhu/ancillary/polys'
         poly_fn = fn_list(poly_dir, f'*{basin}*shp')[0]
         poly_gdf = gpd.read_file(poly_fn)
@@ -265,6 +274,8 @@ def __main__():
         print(f'Detected EPSG is {epsg}')
 
      ### SNOTEL extraction and point specification
+    if verbose:
+        print(f'Preparing basin data for {basin}...')
     labels, basindirs, gdf_metloom, sitenames = prep_basin_data(basin=basin, WY=wy, poly_fn=poly_fn, ST=state_abbrev, epsg=epsg,
                                                                 workdir=workdir, site_locs_fn=site_locs_fn, verbose=verbose)
 
