@@ -69,8 +69,11 @@ def prep_basin_data(basin: str, WY: List, poly_fn: str, ST: str, workdir: str, s
         elif ending =='100m_solar_albedo':
              label_dict[str(PurePath(basindir).stem)] = 'HRRR-MODIS'
 
-    # Filter out basindirs that don't have enough snow.nc files, make sure most of WY is run (at least 270 files)
-    basindirs = [basindir for basindir in basindirs if len(fn_list(basindir, 'run20*/snow.nc'))>=270]
+    if filter_on:
+        # Filter out basindirs that don't have enough snow.nc files, make sure most of WY is run (at least 270 files)
+        basindirs = [basindir for basindir in basindirs if len(fn_list(basindir, 'run20*/snow.nc'))>=filter_on]
+    else:
+        basindirs = [basindir for basindir in basindirs]
 
     # Now generate the labels based on the basindirs and the dict you've created
     labels = [label_dict[str(PurePath(basindir).stem)] for basindir in basindirs]
@@ -239,6 +242,7 @@ def parse_arguments():
                             default='SNOTEL/snotel_sites_32613.json')
         parser.add_argument('-var', '--variable', type=str, help='iSnobal snow variable',
                             choices=['depth', 'density', 'swe', 'all'], default='depth')
+        parser.add_argument('-f', '--filter', type=int, help='Filter on number of snow.nc files', default=None)
         parser.add_argument('-o', '--overwrite', help='Overwrite existing files', default=False)
         parser.add_argument('-v', '--verbose', help='Print filenames', default=True)
         return parser.parse_args()
@@ -251,6 +255,7 @@ def __main__():
     state_abbrev = args.state
     sitelocs = args.sitelocs
     varname = args.variable
+    filter_on = args.filter
     overwrite = args.overwrite
     verbose = args.verbose
 
@@ -277,8 +282,9 @@ def __main__():
     if verbose:
         print(f'Preparing basin data for {basin}...')
     labels, basindirs, gdf_metloom, sitenames = prep_basin_data(basin=basin, WY=wy, poly_fn=poly_fn, ST=state_abbrev, epsg=epsg,
-                                                                workdir=workdir, site_locs_fn=site_locs_fn, verbose=verbose)
-
+                                                                workdir=workdir, site_locs_fn=site_locs_fn, filter_on=filter_on, verbose=verbose)
+    if verbose:
+        print('Extracting timeseries data...')
     extract_timeseries(basindirs, labels, basin, wy, gdf_metloom, sitenames, overwrite=overwrite, varname=varname, verbose=verbose)
 
 if __name__ == "__main__":
