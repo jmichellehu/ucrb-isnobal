@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""This script extracts data from smeshr files used in the HRRR-MODIS net solar implementation
+"""This script extracts data from smeshr files used in the HRRR-SPIReS net solar implementation
 and saves the extracted data to netCDF files."""
 
 import sys
@@ -49,6 +49,8 @@ def parse_arguments():
         parser.add_argument('-shp', '--shapefile', type=str, help='Shapefile of basin polygon', default=None)
         parser.add_argument('-st', '--state', type=str, help='State abbreviation', default='CO')
         parser.add_argument('-e', '--epsg', type=str, help='EPSG of AOI', default=None)
+        parser.add_argument('-s', '--smesh', type=str, help='Path to SMESHR directory',
+                            default='/uufs/chpc.utah.edu/common/home/skiles-group3/SMESHR')
         parser.add_argument('-o', '--outdir', type=str, help='Output directory',
                             default='/uufs/chpc.utah.edu/common/home/skiles-group3/jmhu/data_extracts')
         parser.add_argument('-v', '--verbose', help='Print filenames', default=True)
@@ -61,12 +63,13 @@ def __main__():
     poly_fn = args.shapefile
     state_abbrev = args.state
     epsg = args.epsg
+    smeshdir = args.smesh
     outdir = args.outdir
     verbose = args.verbose
 
     snotel_dir = '/uufs/chpc.utah.edu/common/home/skiles-group3/ancillary_sdswe_products/SNOTEL'
     script_dir = '/uufs/chpc.utah.edu/common/home/skiles-group3/jmhu/isnobal_scripts'
-    smeshdir = f'/uufs/chpc.utah.edu/common/home/skiles-group3/SMESHR/{basin}'
+    smeshdir = f'{smeshdir}/{basin}'
     dswrfdir = f'{smeshdir}/DSWRF'
     model_dir = '/uufs/chpc.utah.edu/common/home/skiles-group3/model_runs/'
 
@@ -86,29 +89,37 @@ def __main__():
     if not os.path.exists(outname):
         print(f'Extracting DSWRF at snotel sites and saving to {outname}')
         # List comprehension is faster than the mf_dataset with parallel=True for some reason
+        print('Loading data files...')
         raw_dswrf_list = [xr.open_dataset(f, chunks='auto', drop_variables=['projection', 'illumination_angle', 'azimuth', 'zenith']) for f in h.fn_list(dswrfdir, f'hrrr.{WY-1}1*') + h.fn_list(dswrfdir, f'hrrr.{WY}0*')]
         # Sample at SNOTEL sites without resampling to daily values
+        print('Sampling at SNOTEL sites...')
         raw_dswrf_sampled = [dswrf.sel(x=list(gdf_metloom.geometry.x.values), y=list(gdf_metloom.geometry.y.values), method='nearest') for dswrf in raw_dswrf_list]
         # Concatenate the sampled datasets
+        print('Concatenating datasets...')
         raw_dswrf = xr.concat(raw_dswrf_sampled, dim='time')
         # Write to file
+        print('Writing to file...')
         raw_dswrf.to_netcdf(outname)
         del raw_dswrf
     else:
         print(f'File {outname} already exists. Skipping extraction.')
-    outname = f'{outdir}/net_HRRR_MODIS_{basin}_{WY}_snotel.nc'
+    outname = f'{outdir}/net_HRRR_SPIReS_{basin}_{WY}_snotel.nc'
     if not os.path.exists(outname):
         print(f'Extracting net solar radiation at snotel sites and saving to {outname}')
         # Just open for the water year by going into the model dir!
         # List comprehension is faster than the mf_dataset with parallel=True for some reason
-        net_HRRR_MODIS_list = [xr.open_dataset(f, chunks='auto', drop_variables=['illumination_angle', 'transverse_mercator']) for f in h.fn_list(model_dir, f'{basin}*/wy{WY}/*albedo/run*/net_solar.nc')]
+        print('Loading data files...')
+        net_HRRR_SPIReS_list = [xr.open_dataset(f, chunks='auto', drop_variables=['illumination_angle', 'transverse_mercator']) for f in h.fn_list(model_dir, f'{basin}*/wy{WY}/*albedo/run*/net_solar.nc')]
         # Sample at SNOTEL sites without resampling to daily values
-        net_HRRR_MODIS_sampled = [net_HRRR_MODIS.sel(x=list(gdf_metloom.geometry.x.values), y=list(gdf_metloom.geometry.y.values), method='nearest') for net_HRRR_MODIS in net_HRRR_MODIS_list]
+        print('Sampling at SNOTEL sites...')
+        net_HRRR_SPIReS_sampled = [net_HRRR_SPIReS.sel(x=list(gdf_metloom.geometry.x.values), y=list(gdf_metloom.geometry.y.values), method='nearest') for net_HRRR_SPIReS in net_HRRR_SPIReS_list]
         # Concatenate the sampled datasets
-        net_HRRR_MODIS = xr.concat(net_HRRR_MODIS_sampled, dim='time')
+        print('Concatenating datasets...')
+        net_HRRR_SPIReS = xr.concat(net_HRRR_SPIReS_sampled, dim='time')
         # Write to file
-        net_HRRR_MODIS.to_netcdf(outname)
-        del net_HRRR_MODIS
+        print('Writing to file...')
+        net_HRRR_SPIReS.to_netcdf(outname)
+        del net_HRRR_SPIReS
     else:
         print(f'File {outname} already exists. Skipping extraction.')
 
