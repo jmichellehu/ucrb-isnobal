@@ -313,7 +313,9 @@ def extract_diffs(basin, WY, dt, arrs, titles, diff_dir, var, original, verbose=
 
 def calc_volumes(arrs_aso_clipped, titles, aso_depth_list, ddx, aso_var, pix_res_list=[100, 100, 1000, 800, 50]):
     arrs2calc = arrs_aso_clipped + [aso_depth_list[ddx][aso_var]]
-
+    # modify for missing NWM
+    if len(arrs2calc) == 4:
+        pix_res_list = [100, 100, 800, 50]
     for pix_res, arr, title in zip(pix_res_list, arrs2calc, titles):
         flat_arr = arr.values.flatten()
         flat_arr = flat_arr[~np.isnan(flat_arr)]
