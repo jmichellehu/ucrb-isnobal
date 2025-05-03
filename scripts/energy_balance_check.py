@@ -1,5 +1,5 @@
 #!/usr/bin/env python
- 
+
 import os
 import argparse
 import matplotlib.pyplot as plt
@@ -23,7 +23,7 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
         regex pattern to match files
     verbose: boolean
         print filenames
-    
+
     Returns
     -------------
     fns: list
@@ -33,18 +33,18 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
     for f in glob.glob(thisDir + "/" + fn_pattern):
         fns.append(f)
     fns.sort()
-    if verbose: 
+    if verbose:
         print(fns)
     return fns
 
 def parse_arguments():
     """Parse command line arguments.
-    Returns: 
+    Returns:
     ----------
     argparse.Namespace
         Parsed command line arguments.
     """
-    parser = argparse.ArgumentParser(description='Plot energy balance terms for a given basin and water year.')
+    parser = argparse.ArgumentParser(description='Plot domain maps of energy balance terms for a given basin and date.')
     parser.add_argument('basin', type=str, help='Basin name', default='animas')
     parser.add_argument('-w', '--workdir', type=str, help='Directory containing model runs', default='/uufs/chpc.utah.edu/common/home/skiles-group1/jmhu/model_runs/')
     parser.add_argument('-dt', '--date', type=str, help='Date of interest YYYYMMDD', default=None)
@@ -65,17 +65,17 @@ def __main__():
     cmap = args.cmap
     vmin = args.vmin
     vmax = args.vmax
-    
+
     # Get the basin directories
     basindirs = fn_list(workdir, f'{basin}*isnobal/')
-    
+
     # Get the WY from the directory name (only a single WY per basin right now, will need to add arg later)
     WY = int(fn_list(basindirs[0], '*')[0].split('/')[-1].split('wy')[-1])
     if dt is None:
         dt = f'{WY-1}1015'
     em_fnlist = [fn_list(basindir, f'*{WY}/*/run{dt}/em.nc')[0] for basindir in basindirs]
     em_list = [np.squeeze(xr.open_dataset(em_fn)) for em_fn in em_fnlist]
-    
+
     if verbose:
         print(em_fnlist)
 
