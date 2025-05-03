@@ -38,7 +38,7 @@ def prep_snotel_sites(basin, script_dir, snotel_dir, WY, poly_fn=None, epsg=None
     return gdf_metloom, sitenames
 
 def extract_data(gdf_metloom, ds_list, basin, WY, outdir, varname='snow',
-                    resampling='nearest', labels=['Baseline', 'HRRR-MODIS']):
+                    resampling='nearest', labels=['Baseline', 'HRRR-SPIReS']):
     '''
     '''
     for kdx, ds in enumerate(ds_list):
@@ -69,6 +69,8 @@ def parse_arguments():
         parser.add_argument('-st', '--state', type=str, help='State abbreviation', default='CO')
         parser.add_argument('-e', '--epsg', type=str, help='EPSG of AOI', default=None)
         parser.add_argument('-p', '--palette', type=str, help='Seaborn color palette', default='icefire')
+        parser.add_argument('-w', '--workdir', type=str, help='Working directory to find basin model runs',
+                            default='/uufs/chpc.utah.edu/common/home/skiles-group3/model_runs/')
         parser.add_argument('-o', '--outdir', type=str, help='Output directory',
                             default='/uufs/chpc.utah.edu/common/home/skiles-group3/jmhu/data_extracts')
         parser.add_argument('-v', '--verbose', help='Print filenames', default=True)
@@ -82,15 +84,19 @@ def __main__():
     state_abbrev = args.state
     epsg = args.epsg
     palette = args.palette
+    workdir = args.workdir
     outdir = args.outdir
     varname = args.varname
     verbose = args.verbose
     sns.set_palette(palette)
 
-    workdir = '/uufs/chpc.utah.edu/common/home/skiles-group3/model_runs/'
+    # workdir = '/uufs/chpc.utah.edu/common/home/skiles-group3/model_runs/'
     snotel_dir = '/uufs/chpc.utah.edu/common/home/skiles-group3/ancillary_sdswe_products/SNOTEL'
     script_dir = '/uufs/chpc.utah.edu/common/home/skiles-group3/jmhu/isnobal_scripts'
     basindirs = h.fn_list(workdir, f'{basin}*isnobal/wy{WY}/{basin}*/')
+    if verbose:
+        print(basindirs)
+
     gdf_metloom, _ = prep_snotel_sites(basin, script_dir, snotel_dir, WY, ST_abbrev=state_abbrev, epsg=epsg,
                                                poly_fn=poly_fn, verbose=verbose)
     # Energy balance
@@ -106,13 +112,14 @@ def __main__():
         extract_data(gdf_metloom, ds_list, basin, WY, outdir, varname=varname, labels=['Baseline'])
     else:
         if varname == 'snow':
-            drop_var_list = ['projection', 'snow_density', 'specific_mass', 'liquid_water', 'temp_surf', 'temp_lower', 'temp_snowcover', 'thickness_lower', 'water_saturation']
+            drop_var_list = ['projection'] #, 'snow_density', 'specific_mass', 'liquid_water', 'temp_surf', 'temp_lower', 'temp_snowcover', 'thickness_lower', 'water_saturation']
         elif varname == 'smrf_2':
             drop_var_list = ['projection', 'air_temp', 'percent_snow', 'precip_temp', 'precip', 'snow_density', 'storm_days', 'vapor_pressure', 'wind_speed']
         else:
             drop_var_list = ['projection']
         # ds_list = [xr.open_mfdataset(h.fn_list(basindir, f'*/{varname}*.nc'), drop_variables=drop_var_list, combine='by_coords', parallel=True) for basindir in basindirs]
         ds_list = [xr.open_mfdataset(h.fn_list(basindir, f'*/{varname}*.nc'), drop_variables=drop_var_list, combine='by_coords') for basindir in basindirs]
+        print(len(ds_list))
 
         # extract at snotel sites
         if verbose:
