@@ -1,5 +1,6 @@
 # Helper functions for working with isnobal outputs, ASO data products, and SNOTEL files
 # TODO - need to organize
+import os
 import sys
 import glob
 
@@ -19,6 +20,8 @@ from s3fs import S3FileSystem, S3Map
 from typing import List
 
 from metloom.pointdata import SnotelPointData
+
+import matplotlib.pyplot as plt
 
 sys.path.append('/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/env/')
 import helpers as h
@@ -685,3 +688,127 @@ def bin_aspect(aspect: xr.DataArray, basinname: str, aspect_labels: List[str] = 
         h.plot_one(aspect_crop_rosebin, cmap=cmap, figsize=figsize, title=title)
 
     return aspect_crop_rosebin
+
+def get_depth_diff_by_roseaspect(aspect_bin, diff_dict, compass_rose=['North', 'East', 'South', 'West'], verbose=False):
+    '''pulls aspect_bin output from bin_aspect()
+    Relies on diff_dict, potentially from extract_diffs() in plot_spatial_comparison.py
+    Can also source from diff arrays from disk which have been ordered into a dict'''
+    snow_depth_dict = dict()
+    if verbose:
+        print('Mean depth difference by aspect')
+    for k in diff_dict.keys():
+        diff_arr = diff_dict[k].load()
+        mean_depth_diff = diff_arr.mean()
+        if verbose:
+            print(f'\n {k} overall mean diff: {mean_depth_diff:.2f} m')
+        for r in range(len(compass_rose)):
+            aspect_slice = diff_arr.data[aspect_bin.data==r+1]
+            aspect_slice = aspect_slice[~np.isnan(aspect_slice)]
+            if verbose:
+                print(f'{compass_rose[r]}: {aspect_slice.min():.1f}, {aspect_slice.mean():.1f}, {aspect_slice.max():.1f}')
+            snow_depth_dict[k] = (aspect_slice, f'{aspect_slice.min():.1f}, {aspect_slice.mean():.1f}, {aspect_slice.max():.1f}')
+    return snow_depth_dict
+
+def get_depth_diff_by_elev(diff_dict, dem, dem_elev_ranges, verbose=False):
+    '''Pulls dem and dem_elev_ranges outputs from bin_elev()
+    Relies on diff_dict, potentially from extract_diffs() in plot_spatial_comparison.py
+    Can also source from diff arrays from disk which have been ordered into a dict
+    '''
+    elev_dict = dict()
+    if verbose:
+        print('Mean depth difference by elevation')
+    for k in diff_dict.keys():
+        diff_arr = diff_dict[k].load()
+        mean_depth_diff = diff_arr.mean()
+        if verbose:
+            print(f'\n {k} overall mean diff: {mean_depth_diff:.2f} m')
+        for elev_range in dem_elev_ranges:
+            # Extract min and max elevations in that bin
+            low, high = dem_elev_ranges[elev_range]
+            elev_slice = diff_arr.data[(dem.data>=low) & (dem.data<high)]
+            elev_slice = elev_slice[~np.isnan(elev_slice)]
+            if verbose:
+                print(f'{low, high}: {elev_slice.min():.1f} || {elev_slice.mean():.1f}, {np.nanmedian(elev_slice):.1f} || {elev_slice.max():.1f}')
+
+            elev_dict[f'{k}_{low}_{high}'] = (elev_slice, f'{elev_slice.min():.1f} || {elev_slice.mean():.1f}, {np.nanmedian(elev_slice):.1f} || {elev_slice.max():.1f}')
+    return elev_dict
+
+def bin_elev_range(dem, dem_elev_ranges, pixel_res=100, verbose=False):
+    '''Relies on bin_elev() outputs. reformat to call that here?'''
+    # bin by elevation range
+    # store the binned and mean values of snow depth difference for that bin in a dict
+    if verbose:
+        print('Basin area by elevation')
+    mean_elevs = []
+    low_elevs = []
+    total_areas = [1] # start off with 1, as the first bin is the lowest elevation and all of the basin is higher than this
+    area_slices = []
+    basin_total = dem.size * pixel_res ** 2
+    for kdx, elev_range in enumerate(dem_elev_ranges):
+        # Extract min and max elevations in that bin
+        low, high = dem_elev_ranges[elev_range]
+        band_slice = dem.data[(dem.data>=low) & (dem.data<high)] # all pixels within this elevation band
+        band_area = band_slice.size * pixel_res ** 2 # calculate area of pixels within this elevation band
+        if kdx == 0:
+            # cumulative sum of area, initiate as elevation band area
+            running_total = band_area
+        else:
+            # add to running total
+            running_total = running_total + band_area
+
+        # calculate mean elevation of this bin for plotting
+        mean_elev = (low + high) / 2
+        low_elevs.append(low)
+        mean_elevs.append(mean_elev)
+
+        # append the area of this elevation band to the list
+        area_slices.append(band_area)
+        # append the proportion of the basin that is higher than this elevation.
+        if kdx == len(dem_elev_ranges)-1:
+            pass #low_elevs.append(high)
+        else:
+            total_areas.append(1 - running_total / basin_total)
+
+    area_slices = np.array(area_slices)
+    return total_areas, low_elevs, mean_elevs, area_slices
+
+def plot_hypsometry(basin, total_areas, low_elevs, outdir=None, verbose=True, overwrite=False):
+    '''Plot hypsometry of the basin using total area and elevation above which the area is located.
+    Relies on bin_elev_range() and bin_elev() outputs. Reformat to call that here?
+    '''
+    _, ax = plt.subplots(1, figsize=(8, 6))
+    # area_slices = np.array(area_slices)
+    ax.scatter(total_areas, low_elevs, s=30, c='teal', linewidths=0.5)
+    ax.plot(total_areas, low_elevs, c='teal')
+
+    # ax.legend(bbox_to_anchor=(1,1));
+    ax.set_xlabel('Cumulative area')
+    # ax.set_xlabel('Relative area')
+    ax.set_ylabel('Binned mean elevation [m]')
+    ax.set_title(f'{basin.capitalize()}: hypsometry', fontsize=12);
+    ax.grid(True)
+    if outdir is not None:
+        outname = f'{outdir}/{basin}_hypsometry.png'
+        if not os.path.exists(outname) or overwrite:
+            if verbose:
+                print(f'Saving as {outname}')
+            plt.savefig(outname, dpi=300, bbox_inches='tight')
+
+def plot_aec(basin, area_slices, mean_elevs, kmflag=False, outdir=None, verbose=True, overwrite=False):
+    '''Plot area elevation curve for given basin'''
+    _, ax = plt.subplots(1, figsize=(8, 6))
+    if kmflag:
+        ax.set_xlabel('Area [km$^2$]')
+        area_slices = area_slices / 1e6 # convert to km^2
+    else:
+        ax.set_xlabel('Area [m$^2$]')
+    ax.scatter(area_slices, mean_elevs, s=30, c='teal', linewidths=0.5)
+    ax.plot(area_slices, mean_elevs, c='teal')
+    ax.set_title(f'{basin.capitalize()}: area elevation curve')
+    ax.grid(True)
+    if outdir is not None:
+        outname = f'{outdir}/{basin}_aec.png'
+        if not os.path.exists(outname) or overwrite:
+            if verbose:
+                print(f'Saving as {outname}')
+            plt.savefig(outname, dpi=300, bbox_inches='tight')
