@@ -7,7 +7,7 @@ from datetime import datetime
 
 
 # specify out directory
-snotel_dir = '/uufs/chpc.utah.edu/common/home/skiles-group3/SNOTEL'
+snotel_dir = '/uufs/chpc.utah.edu/common/home/skiles-group3/ancillary_sdswe_products/SNOTEL'
 
 # read the table from NRCS url
 url = 'https://wcc.sc.egov.usda.gov/nwcc/yearcount?network=sntl&state=&counttype=statelist'

@@ -14,6 +14,26 @@ import xarray as xr
 sys.path.append('/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/env/')
 import helpers as h
 
+def check_compatibility(runtype, var):
+    valid_runtypes = ['baseline', 'hrrrspires', 'ua', 'nwm']
+    valid_vars_dict = {'isnobal': ['thickness', 'snow_density', 'specific_mass',
+                                   'liquid_water', 'temp_surf', 'temp_lower',
+                                   'temp_snowcover', 'thickness_lower', 'water_saturation'],
+                        'ua': ['DEPTH', 'SWE'],
+                        'nwm': ['SNOWH', 'SNEQV']}
+    if runtype not in valid_runtypes:
+        print(f'Error: Invalid runtype {runtype}. Valid options are: {valid_runtypes}')
+        sys.exit(1)
+    if runtype == 'baseline' or runtype == 'hrrrspires' and var not in valid_vars_dict['isnobal']:
+            print(f'Error: Invalid variable {var} for runtype {runtype}. Valid options are: {valid_vars_dict["isnobal"]}')
+            sys.exit(1)
+    elif runtype == 'ua' and var not in valid_vars_dict['ua']:
+        print(f'Error: Invalid variable {var} for runtype {runtype}. Valid options are: {valid_vars_dict["ua"]}')
+        sys.exit(1)
+    elif runtype == 'nwm' and var not in valid_vars_dict['nwm']:
+        print(f'Error: Invalid variable {var} for runtype {runtype}. Valid options are: {valid_vars_dict["nwm"]}')
+        sys.exit(1)
+
 def clip_2_basin(basin_outline_fn, basin, data_dir, polys):
     # Load the basin outline
     basin_outline = gpd.read_file(basin_outline_fn)
@@ -50,7 +70,7 @@ def prep_basin_data(basin, WY,
     # Read in the basin polygons
     basin_polys = gpd.read_file(basin_gpkg_fn)
 
-    # Get the basin directories for the specified water year
+    # Get the isnobal basin directories for the specified water year
     basindirs = h.fn_list(workdir, f'{basin}*/wy{WY}/{basin}*/')
 
     return basindirs, basin_polys
@@ -61,6 +81,32 @@ def load_isnobal_data(basindirs, nc_file='snow.nc'):
     # Load the datasets for each day
     day_list = [xr.open_mfdataset(day_fn_list, chunks='auto') for day_fn_list in day_fns]
     return day_list
+
+def load_ua_data(basin, var, WY):
+    workdir = f'/uufs/chpc.utah.edu/common/home/skiles-group3/ancillary_sdswe_products/UA/{basin}'
+    wy_fn = h.fn_list(workdir, f'{basin}_ua_800m_wy{WY}_{var}.nc')
+    if not wy_fn:
+        print(f'Error: No file found for {basin} water year {WY} variable {var}.')
+        sys.exit(1)
+    else:
+        # Load the ua water year dataset
+        print(f'Loading {wy_fn[0]}')
+        ds = xr.open_mfdataset(wy_fn[0], chunks='auto')
+        return [ds]
+
+def load_nwm_data(basin, var, WY):
+    workdir = f'/uufs/chpc.utah.edu/common/home/skiles-group3/ancillary_sdswe_products/NWM/{basin}'
+    wy_fn = h.fn_list(workdir, f'{basin}_nwm_wy{WY}_{var}.nc')
+    if not wy_fn:
+        print(f'Error: No file found for {basin} water year {WY} variable {var}.')
+        sys.exit(1)
+    else:
+        # Load the ua water year dataset
+        print(f'Loading {wy_fn[0]}')
+        ds = xr.open_mfdataset(wy_fn[0], chunks='auto')
+        # Resample to daily means (currently 8 timesteps each day)
+        ds = ds.resample(time='1D').mean()
+        return [ds]
 
 def locate_topo_zones(basin, basin_polys,
                       topo_dir='/uufs/chpc.utah.edu/common/home/skiles-group3/jmhu/ancillary/snow17_topos',
@@ -139,7 +185,7 @@ def build_cbrfc_var_gdf(basin_polys, basin, WY, ds, topo, zones,
 
     # Save the zonal_gdf to a geopackage
     if save_file is not None:
-        out_fn = f'{data_dir}/isnobal_zonal/CBRFC_SNOW17_{basin}_WY{WY}_{runtype}_zonal_{var}_gdf.gpkg'
+        out_fn = f'{data_dir}/runtype_zonal/CBRFC_SNOW17_{basin}_WY{WY}_{runtype}_zonal_{var}_gdf.gpkg'
         # Default do not overwrite
         if not os.path.exists(out_fn):
             zonal_gdf.to_file(out_fn, driver='GPKG', index=False)
@@ -157,10 +203,13 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='CBRFC zonal calculations for iSnobal output')
     parser.add_argument('basin', type=str, help='Basin name')
     parser.add_argument('wy', type=int, help='Water year of interest')
+    parser.add_argument('--runtype', '-r', type=str, default='baseline',
+                        choices=['baseline', 'hrrrspires', 'ua', 'nwm'],
+                        help='Run type to calculate zonal means for (default: baseline)')
     parser.add_argument('-var', type=str, default='thickness',
                         choices=['thickness', 'snow_density', 'specific_mass',
                                  'liquid_water', 'temp_surf', 'temp_lower',
-                                 'temp_snowcover', 'thickness_lower', 'water_saturation'],
+                                 'temp_snowcover', 'thickness_lower', 'water_saturation', 'DEPTH', 'SWE', 'SNOWH', 'SNEQV'],
                         help='Variable to calculate zonal means for (default: thickness)')
     parser.add_argument('-data_dir', type=str, default='/uufs/chpc.utah.edu/common/home/skiles-group3/ancillary_sdswe_products/CBRFC_SNOW17',
                         help='Directory to save data')
@@ -174,10 +223,25 @@ def __main__():
     workdir = args.workdir
     basin = args.basin
     WY = args.wy
+    runtype = args.runtype
     var = args.var
 
+    # Ensure runtype and var combination are valid
+    check_compatibility(runtype=runtype, var=var)
+
     basindirs, basin_polys = prep_basin_data(basin=basin, WY=WY, data_dir=data_dir, workdir=workdir)
-    day_list = load_isnobal_data(basindirs)
+
+    # Run both isnobal runtypes if either is provided
+    if runtype == 'baseline' or runtype == 'hrrrspires':
+        day_list = load_isnobal_data(basindirs)
+        runtypes = ['baseline', 'hrrrspires']
+    else:
+        if runtype == 'ua':
+            day_list = load_ua_data(basin, var, WY)
+        elif runtype == 'nwm':
+            day_list = load_nwm_data(basin, var, WY)
+        runtypes = [runtype]
+
     # Reproject polygon to EPSG 32613
     basin_polys = basin_polys.to_crs('EPSG:32613')
     topo, zones, zone_names = locate_topo_zones(basin, basin_polys)
@@ -189,7 +253,18 @@ def __main__():
         sys.exit(1)
 
     zonal_gdf_list = []
-    for ds, runtype in zip(day_list, ['baseline', 'hrrrspires']):
+    for ds, runtype in zip(day_list, runtypes):
+        # Explicitly write out the crs for the dataset (needed for any non-iSnobal datasets)
+        ds = ds.rio.write_crs(input_crs=ds.crs.attrs['spatial_ref'], inplace=True)
+        # Reproject the dataset to the basin poly crs
+        ds = ds.rio.reproject(basin_polys.geometry.crs, inplace=True)
+        print(ds.rio.crs)
+        # Explicitly write out the crs for the topo dataset
+        topo = topo.rio.write_crs(input_crs=basin_polys.geometry.crs, inplace=True)
+        # Reproject match to the dataset grid using nearest neighbor interpolation (default)
+        # This way, you retain the actual zone values without introducing new nonsensical values
+        topo = topo.rio.reproject_match(ds, inplace=True)
+        # NOTE: another option is to check that the dimensions and CRS are the same (in iSnobal case)
         zonal_gdf = build_cbrfc_var_gdf(basin_polys=basin_polys, ds=ds, topo=topo,
                                         basin=basin, WY=WY,
                                         runtype=runtype, zones=zones,

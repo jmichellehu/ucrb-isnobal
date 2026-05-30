@@ -19,6 +19,20 @@ import helpers as h
 
 sys.path.append('/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/ucrb-isnobal/scripts/')
 
+SMALL_SIZE = 14
+SMEDIUM_SIZE = 16
+MEDIUM_SIZE = 22
+BIGGER_SIZE = 24
+BIGGEST_SIZE = 28
+
+plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
+plt.rc('axes', titlesize=MEDIUM_SIZE)     # fontsize of the axes title
+plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+plt.rc('xtick', labelsize=SMEDIUM_SIZE)    # fontsize of the tick labels
+plt.rc('ytick', labelsize=SMEDIUM_SIZE)    # fontsize of the tick labels
+plt.rc('legend', fontsize=BIGGER_SIZE)    # legend fontsize
+plt.rc('figure', titlesize=BIGGEST_SIZE)  # fontsize of the figure title
+
 def get_dirs_filenames(basin: str, WY:int, verbose: bool = False, res: int = 100,
                            workdir: str = '/uufs/chpc.utah.edu/common/home/skiles-group3/model_runs/'):
     """Find basin directories and water year directory for each model run
@@ -131,10 +145,11 @@ def plot_var_heatmap(ds_list, veglist, var, xlab, ylab, calc_fns, beginning,
             if savefig:
                 fig.savefig(fig_fn, dpi=300, bbox_inches='tight')
 
-def plot_median_shift(veglist: List, diff, xlab, ylab, abbrev_lab, beginning, basin, WY, 
-                      histtype = 'step', histbins = 52, histlw = 1.5, annotcolor = 'k', annotsize = 12, palette = 'tab20',
-                      xlims = (-150, 150), suptitlesize = 14, suptitley = 1.02, diffannotcenterx = 75,
-                      savefig: bool = False, figsize: tuple = (12, 4)):
+def plot_median_shift(veglist: List, diff, xlab, ylab, abbrev_lab, beginning, basin, WY, bin_width=5,
+                      histtype = 'step', histlw = 4, annotcolor = 'k', annotsize = 16, palette = 'tab20',
+                    #   xlims = (-150, 150), diffannotcenterx = 75,
+                      xlims = (-100, 100), diffannotcenterx = 50,
+                      savefig: bool = False, figsize: tuple = (6, 4)):
         """Calculate median shift per class"""
         xvar = veglist
         yvar = diff
@@ -143,9 +158,14 @@ def plot_median_shift(veglist: List, diff, xlab, ylab, abbrev_lab, beginning, ba
                 pass
             else:
                 unique_vals = np.unique(xvar[zdx])
-                fig, ax = plt.subplots(figsize=(8,4))
-                # Desired bin width
-                bin_width = 2
+                # Create a color dictionary for the unique values
+                if zdx == 0:
+                    veg_height_classes = [0.00, 0.25, 0.75, 1.00, 2.00, 2.50, 3.00, 7.50, 17.50, 37.50]
+                    # color_dict = {c: sns.color_palette(palette, len(veg_height_classes))[len(veg_height_classes)-kdx-1] for kdx, c in enumerate(veg_height_classes)}
+                    color_dict = {c: sns.color_palette(palette, len(veg_height_classes))[kdx] for kdx, c in enumerate(veg_height_classes)}
+                else:
+                    color_dict = {c: sns.color_palette(palette, len(unique_vals))[kdx] for kdx, c in enumerate(unique_vals)}
+                fig, ax = plt.subplots(figsize=figsize)
                 # Set a standard bin width despite variability and range in class values
                 for kdx, c in enumerate(unique_vals):
                     this_class = yvar.where(xvar[zdx] == c).values
@@ -154,27 +174,34 @@ def plot_median_shift(veglist: List, diff, xlab, ylab, abbrev_lab, beginning, ba
                     min_val = np.min(this_class)
                     max_val = np.max(this_class)
                     bins = np.arange(min_val, max_val + bin_width, bin_width)
-                    # ax.hist(this_class, histtype=histtype, bins=histbins * 2, linewidth=histlw, label=f'{c:.2f}')
-                    ax.hist(this_class, histtype=histtype, bins=bins, linewidth=histlw, label=f'{c:.2f}')
+                    ax.hist(this_class, histtype=histtype, bins=bins, linewidth=histlw, label=f'{c:.2f}', ec=color_dict[c])
+                # Set ylims
+                if basin == 'blue':
+                    ylims = (0, 20000)
+                elif basin == 'animas':
+                    ylims = (0, 50000)
+                elif basin == 'yampa':
+                    ylims = (0, 100000)
+                ax.set_ylim(ylims)
                 # Annotate the median doy for each class c in the color of the histogram
-                classcolors = sns.color_palette(palette, len(unique_vals))
+                # classcolors = sns.color_palette(palette, len(unique_vals))
                 ymean = ax.get_ylim()[1] / 3 * 2.5
                 print(ymean)
-                _ = [ax.annotate(f'{c:.2f}: {np.nanmedian(yvar.where(xvar[zdx] == c).values)}', xy=(diffannotcenterx, ymean-kdx*ymean*0.07),
-                                    c=classcolors[kdx], fontsize=annotsize, ha='center') for kdx, c in enumerate(unique_vals)]
+                _ = [ax.annotate(f'{c:.2f}: {np.nanmedian(yvar.where(xvar[zdx] == c).values)}', xy=(diffannotcenterx, ymean-kdx*ymean*0.1),
+                                    c=color_dict[c], fontsize=annotsize, ha='center') for kdx, c in enumerate(unique_vals)]
                 # add the "legend" for annotations
                 ax.annotate(f'{xlab[zdx]}: {abbrev_lab}', xy=(diffannotcenterx, ymean+ymean*0.1), c=annotcolor, fontsize=annotsize, ha='center')
                 # Add dashed zero line
                 ax.axvline(0, linestyle='--', color='k', alpha=0.3)
                 ax.set_xlim(xlims)
-                ax.annotate(f'{basin.capitalize()} WY {WY}', xy=(-145, ymean*1.1), c=annotcolor, fontweight='bold', fontsize=14, ha='left')
+                # ax.annotate(f'{basin.capitalize()} WY {WY}', xy=(-145, ymean*1.1), c=annotcolor, fontweight='bold', fontsize=14, ha='left')
 
-                # Plot annotation showing earlier melt vs. later melt than Baseline
-                ax.annotate('HRRR-SPIReS \nmelts earlier', xy=(-100, ymean/5), c='goldenrod', fontsize=annotsize, ha='center')
-                ax.annotate('HRRR-SPIReS \nmelts later', xy=(100, ymean/5), c='b', fontsize=annotsize, ha='center')
+                # # Plot annotation showing earlier melt vs. later melt than Baseline
+                # ax.annotate('HRRR-SPIReS \nmelts earlier', xy=(-100, ymean/5), c='goldenrod', fontsize=annotsize, ha='center')
+                # ax.annotate('HRRR-SPIReS \nmelts later', xy=(100, ymean/5), c='b', fontsize=annotsize, ha='center')
 
                 # Save fig
-                fig_fn = f'{beginning}_{xlab[zdx].split("Veg ")[1].split(" ")[0].lower()}_hist_shift.png'
+                fig_fn = f'{beginning}_{xlab[zdx].split("Veg ")[1].split(" ")[0].lower()}_hist_shift_{palette}.png'
                 print(fig_fn)
                 if savefig:
                     fig.savefig(fig_fn, dpi=300, bbox_inches='tight')

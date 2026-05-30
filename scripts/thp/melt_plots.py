@@ -725,7 +725,7 @@ def plot_dominant_eb_term(term_median_matrices: dict,
     margin[all_nan]  = 0.0
 
     # Categorical colormap — one colour per term
-    colors = plt.cm.Set2(np.linspace(0, 1, n_terms))
+    colors = plt.colormaps['Set2'](np.linspace(0, 1, n_terms))
     cmap   = ListedColormap(colors)
     norm   = Normalize(vmin=-0.5, vmax=n_terms - 0.5)
 

@@ -463,6 +463,13 @@ def plot_sdd_by_elev_line(basindirs, dem_elev_ranges, sdd_elev_date_dict, elapse
     ax.set_ylabel('Snow disappearance date')
     ax.set_xlabel('Binned mean elevation [m]')
     ax.set_title(title)
+
+    # output these stats to csv
+    stat_dict = {'Mean_Elev': mean_elevs, 'Baseline': mean_doy_list[0], 'HRRR-SPIReS': mean_doy_list[1]}
+    stat_df = pd.DataFrame(stat_dict)
+    wydir = PurePath(basindirs[0]).parents[0].as_posix()
+    stat_df.to_csv(f'{wydir}/{basin}_{statname}_sdd_elev_by_doy_wy{WY}.csv')
+
     if outname is not None:
         plt.savefig(outname, bbox_inches='tight', dpi=300)
     return mean_elevs
@@ -700,6 +707,7 @@ def parse_arguments():
     parser.add_argument('-p', '--palette', type=str, help='Seaborn color palette', default='icefire')
     parser.add_argument('-o', '--outdir', type=str, help='Output directory',
                         default='/uufs/chpc.utah.edu/common/home/skiles-group3/jmhu/figures/sdd')
+    parser.add_argument('-ow', '--overwrite', help='Overwrite existing files', default=False)
     parser.add_argument('-v', '--verbose', help='Print filenames', default=True)
     return parser.parse_args()
 
@@ -710,6 +718,7 @@ def __main__():
     WY = args.wy
     palette = args.palette
     outdir = args.outdir
+    overwrite = args.overwrite
     verbose = args.verbose
     sns.set_palette(palette)
 
@@ -737,7 +746,10 @@ def __main__():
     # Plot SDD shift map
     print('\nPlotting SDD shift maps')
     outname = f'{outdir}/{basin}_sdd_shift_map_wy{WY}.png'
-    sdd_diff = calcnplot_sdd_shift(wydir=wydir, sdd_date_ds_list=sdd_date_ds_list, hs=hs, outname=outname)
+    if not os.path.exists(outname) or overwrite:
+        sdd_diff = calcnplot_sdd_shift(wydir=wydir, sdd_date_ds_list=sdd_date_ds_list, hs=hs, outname=outname)
+    else:
+        print(f'File {outname} already exists and overwrite is {overwrite}. Skipping.')
 
     # Calculate seconds since up to january first of this water year
     elapsed_sec = pd.to_datetime([f'{WY}-01-01 00:00:00']).astype(int) / 10**9
@@ -745,11 +757,17 @@ def __main__():
 
     # Plot SDD shift histogram
     outname = f'{outdir}/{basin}_sdd_shift_hist_wy{WY}.png'
-    plot_sdd_shift_hist(wydir=wydir, sdd_date_ds_list=sdd_date_ds_list, sdd_diff=sdd_diff, labels=labels, elapsed_sec=elapsed_sec, outname=outname)
+    if not os.path.exists(outname) or overwrite:
+        plot_sdd_shift_hist(wydir=wydir, sdd_date_ds_list=sdd_date_ds_list, sdd_diff=sdd_diff, labels=labels, elapsed_sec=elapsed_sec, outname=outname)
+    else:
+        print(f'File {outname} already exists and overwrite is {overwrite}. Skipping.')
 
     outname = f'{outdir}/{basin}_sdd_maps_wy{WY}.png'
-    aug1_doy = 213
-    plot_sdd_maps(sdd_date_ds_list=sdd_date_ds_list, hs=hs, vmax=aug1_doy, elapsed_sec=elapsed_sec, labels=labels, outname=outname)
+    if not os.path.exists(outname) or overwrite:
+        aug1_doy = 213
+        plot_sdd_maps(sdd_date_ds_list=sdd_date_ds_list, hs=hs, vmax=aug1_doy, elapsed_sec=elapsed_sec, labels=labels, outname=outname)
+    else:
+        print(f'File {outname} already exists and overwrite is {overwrite}. Skipping.')
 
     # Move to parsing by terrain variables
     print('\nMoving to terrain variables')
@@ -758,28 +776,52 @@ def __main__():
     print('Aspect')
     aspect_bin, aspect_proportions = parse_by_aspect(aspect=aspect, basin=basin, sdd_date_ds_list=sdd_date_ds_list, WY=WY, verbose=verbose)
     outname = f'{outdir}/{basin}_sdd_by_aspect_wy{WY}.png'
-    plot_sdd_by_aspect(aspect_bin=aspect_bin, sdd_date_ds_list=sdd_date_ds_list, labels=labels, wydir=wydir, aspect_proportions=aspect_proportions, outname=outname)
+    if not os.path.exists(outname) or overwrite:
+        plot_sdd_by_aspect(aspect_bin=aspect_bin, sdd_date_ds_list=sdd_date_ds_list, labels=labels, wydir=wydir, aspect_proportions=aspect_proportions, outname=outname)
+    else:
+        print(f'File {outname} already exists and overwrite is {overwrite}. Skipping.')
+
     outname = f'{outdir}/{basin}_sdd_by_aspect_line_wy{WY}.png'
-    plot_sdd_by_aspect_line(basindirs=basindirs, aspect_proportions=aspect_proportions, elapsed_sec=elapsed_sec, labels=labels, outname=outname)
+    if not os.path.exists(outname) or overwrite:
+        plot_sdd_by_aspect_line(basindirs=basindirs, aspect_proportions=aspect_proportions, elapsed_sec=elapsed_sec, labels=labels, outname=outname)
+    else:
+        print(f'File {outname} already exists and overwrite is {overwrite}. Skipping.')
 
     # Elevation
     print('Elevation')
     sdd_elev_date_dict, dem_elev_ranges = parse_by_elev(dem=dem, basin=basin, basindirs=basindirs, sdd_date_ds_list=sdd_date_ds_list, WY=WY)
     outname = f'{outdir}/{basin}_sdd_by_elev_line_wy{WY}.png'
+    # if os.path.exists(outname) and not overwrite:
+    #     print(f'File {outname} already exists and overwrite is set to False. Skipping.')
+    # else:
     mean_elevs = plot_sdd_by_elev_line(basindirs=basindirs, dem_elev_ranges=dem_elev_ranges, sdd_elev_date_dict=sdd_elev_date_dict,
-                                       elapsed_sec=elapsed_sec, labels=labels, outname=outname)
+                                        elapsed_sec=elapsed_sec, labels=labels, outname=outname)
     outname = f'{outdir}/{basin}_sdd_by_elev_boxplots_wy{WY}.png'
-    plot_sdd_by_elev_boxplots(basindirs=basindirs, dem_elev_ranges=dem_elev_ranges, sdd_elev_date_dict=sdd_elev_date_dict, mean_elevs=mean_elevs, outname=outname)
+    if not os.path.exists(outname) or overwrite:
+        plot_sdd_by_elev_boxplots(basindirs=basindirs, dem_elev_ranges=dem_elev_ranges, sdd_elev_date_dict=sdd_elev_date_dict, mean_elevs=mean_elevs, outname=outname)
+    else:
+        print(f'File {outname} already exists and overwrite is {overwrite}. Skipping.')
 
     # Slope
     print('\nSlope')
     slope_bin, slope_proportions = parse_by_slope(basin=basin, slope=slope)
     outname = f'{outdir}/{basin}_sdd_by_slope_wy{WY}.png'
-    plot_sdd_by_slope(basin=basin, wydir=wydir, slope_bin=slope_bin, sdd_date_ds_list=sdd_date_ds_list, labels=labels, slope_proportions=slope_proportions, outname=outname)
+    if not os.path.exists(outname) or overwrite:
+        plot_sdd_by_slope(basin=basin, wydir=wydir, slope_bin=slope_bin, sdd_date_ds_list=sdd_date_ds_list, labels=labels, slope_proportions=slope_proportions, outname=outname)
+    else:
+        print(f'File {outname} already exists and overwrite is {overwrite}. Skipping.')
+
     outname = f'{outdir}/{basin}_sdd_by_slope_line_wy{WY}.png'
-    sdd_slope_date_dict, mean_slopes = plot_sdd_by_slope_line(basindirs=basindirs, sdd_date_ds_list=sdd_date_ds_list, slope_bin=slope_bin, elapsed_sec=elapsed_sec, labels=labels, outname=outname)
+    if not os.path.exists(outname) or overwrite:
+        sdd_slope_date_dict, mean_slopes = plot_sdd_by_slope_line(basindirs=basindirs, sdd_date_ds_list=sdd_date_ds_list, slope_bin=slope_bin, elapsed_sec=elapsed_sec, labels=labels, outname=outname)
+    else:
+        print(f'File {outname} already exists and overwrite is {overwrite}. Skipping.')
+
     outname = f'{outdir}/{basin}_sdd_by_slope_boxplots_wy{WY}.png'
-    plot_sdd_by_slope_boxplots(basindirs=basindirs, sdd_slope_date_dict=sdd_slope_date_dict, mean_slopes=mean_slopes, outname=outname)
+    if not os.path.exists(outname) or overwrite:
+        plot_sdd_by_slope_boxplots(basindirs=basindirs, sdd_slope_date_dict=sdd_slope_date_dict, mean_slopes=mean_slopes, outname=outname)
+    else:
+        print(f'File {outname} already exists and overwrite is {overwrite}. Skipping.')
 
 if __name__ == "__main__":
     __main__()

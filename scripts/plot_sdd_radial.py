@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-'''Script for radial plot of shift in snow disappearance date
+'''Script for radial plot of shift in variable value, originally for snow disappearance date
 
 Usage: plot_sdd_radial.py basin wy
 '''
@@ -21,26 +21,30 @@ import processing as proc
 
 # Set seaborn palette
 sns.set_palette('icefire')
-def plot_radial(combo_ds, elevation_bins=None, cmap=None, elev_fontcolor="black",
-                title=None, vminnorm=-45, vmaxnorm=45, num_aspect_bins=16, aspect_labels=None,
-                verbose=True, outname=None
+def plot_radial(combo_ds, combo_var='sdd_shift', combo_var_units='Days', elevation_bins=None, cmap=None, elev_fontcolor="black",
+                title=None, vminnorm=-45, vmaxnorm=45, num_aspect_bins=16,
+                aspect_labels=['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
+                               'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'],
+                figsize=(8, 6.5), fontsize=11, elev_labels_on=True, show_cbar=True,
+                verbose=True, ax=None, outname=None
                 ):
     '''Need input for aspect_labels if num_aspect_bins is not 16
-    TODO check where the aspec slice edges are
+    TODO check where the aspect slice edges are
     '''
     aspects = combo_ds['aspect'].values.flatten()
     elevation = combo_ds['dem'].values.flatten()
-    peak_swe_shift = combo_ds['sdd_shift'].values.flatten()
+    ds_vals = combo_ds[combo_var].values.flatten()
 
-    valid_data = ~np.isnan(peak_swe_shift) & ~np.isnan(elevation) & ~np.isnan(aspects)
+    valid_data = ~np.isnan(ds_vals) & ~np.isnan(elevation) & ~np.isnan(aspects)
 
     # Apply the valid data mask
     aspects = aspects[valid_data]
     elevation = elevation[valid_data]
-    peak_swe_shift = peak_swe_shift[valid_data]
+    ds_vals = ds_vals[valid_data]
 
     # Step 1: Bin the aspect values into 16 bins (one for each direction)
-    aspect_bins = np.linspace(0, num_aspect_bins, num_aspect_bins + 1).astype(int)  # 16 bins for aspect
+    # aspect_bins = np.linspace(0, num_aspect_bins, num_aspect_bins + 1).astype(int)  # 16 bins for aspect
+    aspect_bins = np.linspace(0, 360, num_aspect_bins + 1).astype(int)  # 16 bins for aspect
     aspect_binned = np.digitize(aspects, aspect_bins) - 1  # 0-indexed bins
 
     # Step 2: Bin the elevation values using the custom bins
@@ -54,25 +58,30 @@ def plot_radial(combo_ds, elevation_bins=None, cmap=None, elev_fontcolor="black"
     num_elevation_bins = len(elevation_bins) - 1 # Based on custom elevation bins
 
     # Step 3: Aggregate peak_swe_shift by both aspect and elevation
+    # order matters here, loop through aspect first for plotting later
     aggregated_values = []
     for aspect_bin in range(num_aspect_bins):
         for elev_bin in range(num_elevation_bins):  # Based on number of elevation intervals
             # Mask for the given aspect and elevation bin
             mask = (aspect_binned == aspect_bin) & (elevation_binned == elev_bin)
-            valid_values = peak_swe_shift[mask]
+            valid_values = ds_vals[mask]
 
             if len(valid_values) > 0:
                 aggregated_values.append(np.mean(valid_values))
             else:
                 aggregated_values.append(np.nan)
+                # Note these combinations where no valid values were found
+                if verbose:
+                    print(f'No valid values for aspect bin {aspect_labels[aspect_bin]}, elevation bin {elevation_bins[elev_bin]}')
 
     aggregated_values = np.array(aggregated_values)
 
     # Step 4: Create a polar plot where the angle corresponds to aspect,
-    # radius corresponds to reversed elevation bin, and color represents peak_swe_shift
+    # radius corresponds to reversed elevation bin, and color represents the variable values
 
     # Set up the polar plot
-    _, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 6.5), dpi=300)
+    if ax is None:
+        _, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=figsize)
 
     # Angles for each aspect bin
     angles = np.linspace(0, 2 * np.pi, num_aspect_bins, endpoint=False)
@@ -90,14 +99,18 @@ def plot_radial(combo_ds, elevation_bins=None, cmap=None, elev_fontcolor="black"
 
     for aspect_bin in range(num_aspect_bins):
         for elev_bin in range(num_elevation_bins):
+            # skip nans and simplify color selection below
+            val = aggregated_values[aspect_bin * num_elevation_bins + elev_bin]
+            if np.isnan(val):
+                continue
             # Calculate the radius based on the reversed elevation bin
             r = radius[elev_bin]
 
             # Angle for this aspect bin
             theta = angles[aspect_bin]
 
-            # Color based on the aggregated peak_swe_shift value
-            color = cmap(norm(aggregated_values[aspect_bin * num_elevation_bins + elev_bin]))
+            # Color based on the aggregated value
+            color = cmap(norm(val))
 
             # Plot the bar at the correct angle and radius with no spacing
             ax.bar(theta, r, width=bar_width, bottom=0, color=color, alpha=0.8)
@@ -113,15 +126,10 @@ def plot_radial(combo_ds, elevation_bins=None, cmap=None, elev_fontcolor="black"
     # Set grid lines at the boundaries between directions
     ax.set_xticks(grid_angles)  # Align grid lines between aspect bins
 
-    # Define the angles for label placement at the center of each direction
+    # Define the angles for aspect label placement at the center of each direction
     label_angles = np.linspace(0, 2 * np.pi, num_aspect_bins, endpoint=False)  # Center positions
 
-    # Set labels for each direction only
-    if num_aspect_bins == 16:
-        aspect_labels = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
-                        'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
-
-    ax.set_xticks(label_angles, labels=aspect_labels, size =11)
+    ax.set_xticks(label_angles, labels=aspect_labels, size=fontsize)
     ax.grid(False)  # Turns off all grid lines
     # Set labels at centers without affecting grid lines
 
@@ -129,20 +137,26 @@ def plot_radial(combo_ds, elevation_bins=None, cmap=None, elev_fontcolor="black"
     #ax.grid(color='grey', linestyle='--', linewidth=0.5)  # Adjust style if desired
 
     # Reverse radius labels to match reversed elevation bins
-    ax.set_yticks(radius)
-    ax.set_yticklabels([f"{int(elev)} m" for elev in elevation_bins[:-1]],
-                    size=7,
-                    color=elev_fontcolor)  # Label each elevation bin
+    # Label every other elevation bin to reduce clutter
+    ax.set_yticks(radius[::2])
+    if elev_labels_on:
+        ax.set_yticklabels([f"{int(elev)} m" for elev in elevation_bins[:-1:2]],
+                        size=fontsize * 0.65,
+                        color=elev_fontcolor)
+    else:
+        ax.set_yticklabels([])  # Hide radius labels if not needed
     ax.set_ylim(0, 1)
 
-    # Add colorbar for peak_swe_shift values
-    cbar = plt.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, orientation='vertical', pad=0.1)
-    cbar.set_label('SDD shift (Days)')#, size=16)
+    # Add colorbar for the variable values
+    if show_cbar:
+        cbar = plt.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, orientation='vertical', pad=0.1)
+        cbar.set_label(f'{combo_var} ({combo_var_units})', size=fontsize * 0.9)
+        cbar.ax.tick_params(labelsize=fontsize * 0.8)
 
     # Add title
     if title is None:
         title='Insert title here'
-    ax.set_title(title, va='bottom');#, size=18)
+    ax.set_title(title, va='bottom', size=fontsize*1.1)
     if outname is not None:
         if verbose:
             print(f'Saving to {outname}')

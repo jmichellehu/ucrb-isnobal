@@ -10,6 +10,7 @@ import copy
 import numpy as np
 import pandas as pd
 import datetime
+import logging
 
 import xarray as xr
 import geopandas as gpd
@@ -25,6 +26,15 @@ import matplotlib.pyplot as plt
 
 sys.path.append('/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/env/')
 import helpers as h
+
+LOGGER = logging.getLogger(__name__)
+
+def _configure_logging(verbose: bool) -> None:
+    """Ensure module-wide logging is configured once."""
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(level=level, format='%(asctime)s %(levelname)s %(message)s')
+
+_configure_logging(False)
 
 month_dict = {
     'Jan': 1,
@@ -218,7 +228,7 @@ def assign_dt(ds: xr.Dataset, dt: datetime) -> xr.Dataset:
     ds = ds.expand_dims(time=dt)
     return ds
 
-def calc_sdd(snow_property: pd.Series, alg: str = "threshold", day_thresh: int = 10, verbose: bool = False):
+def calc_sdd(snow_property: pd.Series, alg: str = 'first', var: str = 'depth', day_thresh: int = 10, verbose: bool = False):
     '''
     Calculate snow disappearance date from a pandas series of a snow property (snow depth or SWE).
     The snow disappearance date is represented by the last date at which the first derivative is nonzero.
@@ -263,8 +273,8 @@ def calc_sdd(snow_property: pd.Series, alg: str = "threshold", day_thresh: int =
         # Pull index of maximum value
         max_depth_date = snow_property.idxmax()
         if verbose:
-            print(f"Max depth date: {max_depth_date}")
-            print(f"Max depth is: {snow_property.loc[max_depth_date]}")
+            print(f"Max {var} date: {max_depth_date}")
+            print(f"Max {var} is: {snow_property.loc[max_depth_date]}")
         # Pull index of minimum value after max depth date
         # idxmin pulls the first value (date) if multiple meet the condition
         snow_all_gone_date = snow_property.loc[max_depth_date:].idxmin()
@@ -376,7 +386,8 @@ def locate_snotel_in_poly(poly_fn: str, site_locs_fn: str, buffer: int = 0, bbox
     '''
     sites_gdf = gpd.read_file(site_locs_fn)
     site_epsg = sites_gdf.crs.to_epsg()
-    print(site_epsg)
+    LOGGER.debug('Site EPSG: %s', site_epsg)
+    LOGGER.debug('Input EPSG: %s', epsg)
     # Reproject sites to match input EPSG if they are not the same
     if site_epsg != epsg:
         sites_gdf = sites_gdf.to_crs(f'epsg:{epsg}')
@@ -435,7 +446,8 @@ def get_nwm_retrospective_LDAS(site_gdf: gpd.GeoDataFrame, start: str = None, en
 
     return ds_list
 
-def get_snotel(sitenum: List[int], sitename: List[str], ST: List[str], WY: List, epsg: int = 32613, snowvar: str = 'SNOWDEPTH', return_meta: bool = False) -> tuple:
+def get_snotel(sitenum: List[int], sitename: List[str], ST: List[str], WY: List, epsg: int = 32613, snowvar: str = 'SNOWDEPTH',
+               return_df: bool = False, return_meta: bool = False) -> tuple:
     '''Use metloom to pull snotel coordinates and return as geodataframe and daily data as dict of dataframes
     valid snow variables: SNOWDEPTH, SWE
     WY can be a single year or a list of years
@@ -448,6 +460,7 @@ def get_snotel(sitenum: List[int], sitename: List[str], ST: List[str], WY: List,
         WY: water year or list of water years
         epsg: epsg code for UTM zone, defaults to 32613
         snowvar: snow variable to pull, 'SNOWDEPTH', 'SWE', otherwise pulls both. Defaults to 'SNOWDEPTH'
+        return_df: return as a dataframe instead of a dict, defaults to False
         return_meta: return metadata dataframes, defaults to False
     Returns
     ----------
@@ -461,7 +474,11 @@ def get_snotel(sitenum: List[int], sitename: List[str], ST: List[str], WY: List,
         start_date = datetime.datetime(WY-1, 10, 1)
         end_date = datetime.datetime(WY, 9, 30)
 
-    snotel_dfs = dict()
+    if return_df:
+        snotel_dfs = list()
+        snotel_names = list()
+    else:
+        snotel_dfs = dict()
     snotellats = []
     snotellons = []
     meta_dfs = []
@@ -487,6 +504,11 @@ def get_snotel(sitenum: List[int], sitename: List[str], ST: List[str], WY: List,
         df = snotel_point.get_daily_data(start_date, end_date, variables)
         # df = snotel_point.get_hourly_data(start_date, end_date, variables)
 
+        # If there is no data for the time period of interest, flag and skip this site
+        if df is None or df.empty:
+            LOGGER.warning("No data available for SNOTEL site %s between %s and %s", snotelNAME, start_date, end_date)
+            continue
+
         # Convert to metric here
         if snowvar == "SNOWDEPTH":
             df['SNOWDEPTH_m'] = df['SNOWDEPTH'] * 0.0254
@@ -499,9 +521,12 @@ def get_snotel(sitenum: List[int], sitename: List[str], ST: List[str], WY: List,
 
         # Reset the index
         df = df.reset_index().set_index("datetime")
-
-        # Store in dict
-        snotel_dfs[snotelNAME] = df
+        if return_df:
+            snotel_dfs.append(df)
+            snotel_names.append(snotelNAME)
+        else:
+            # Store in dict
+            snotel_dfs[snotelNAME] = df
 
     # Create a Geoseries based off of a list of a Shapely point using the lat and lon from the SNOTEL site
     s = gpd.GeoSeries([Point(lon, lat) for lon, lat in zip(snotellons, snotellats)])
@@ -515,15 +540,30 @@ def get_snotel(sitenum: List[int], sitename: List[str], ST: List[str], WY: List,
     # Convert snotel coords' lat lon to UTM
     gdf = gdf.to_crs(f'epsg:{epsg}')
 
+    if return_df:
+        # get the sitenames in there
+        for df, sitename in zip(snotel_dfs, snotel_names):
+            df['sitename'] = sitename
+
     if return_meta:
         return gdf, snotel_dfs, meta_dfs
     else:
         return gdf, snotel_dfs
 
-def bin_elev(dem: xr.DataArray, basinname: str, equal_spacing: bool = True, p: int = 10, verbose: bool = False, plot_on: bool = True,
+def construct_elev_bin_dict(p, r, dem_elev_ranges, dem_elev_range, dem_bin_arr):
+    pmod = 100 / p # this is the percentile coverage with p total bins
+    elev_rangename = f'{np.round(r * pmod, 1)}_{np.round((r+1) * pmod, 1)}'
+    dem_elev_ranges[elev_rangename] = dem_elev_range
+    conditions = (dem_bin_arr > dem_elev_range[0]) & (dem_bin_arr <= dem_elev_range[1])
+    dem_bin_arr[conditions] = r + 1
+    return dem_elev_ranges, dem_elev_range, dem_bin_arr
+
+def bin_elev(dem: xr.DataArray, basinname: str, equal_spacing: bool = True, p: int = 10,
+             round_on: bool=False, verbose: bool = False, plot_on: bool = True,
              cmap: str = 'viridis', figsize: tuple = (4, 6), title: str = 'elevation binned') -> tuple[xr.DataArray, dict]:
     """Bin elevation based on p equally spaced bins or percent spacing
     (which should split into equivalent areas of the watershed)
+    TODO: check how highest values > bin_range are handled in dem_elev_ranges
     Parameters
     ----------
         dem: Digital elevation model (DEM) data.
@@ -551,8 +591,43 @@ def bin_elev(dem: xr.DataArray, basinname: str, equal_spacing: bool = True, p: i
     # contains minimum inclusive value of percentile range
     dem_elev_ranges = dict()
 
-    # equally spaced binning
-    if equal_spacing:
+    # Round the computed ranges to the nearest hundred
+    # Currently hardcoded, can be modified
+    if round_on:
+        floor_elev = np.round(np.nanmin(dem_bin_arr) / 100, 0) * 100
+        ceiling_elev = np.round((np.nanmax(dem_bin_arr)) / 100, 0) * 100
+        if p is not None:
+            # Take the input bin number and calculate the elevation step
+            elev_step = (ceiling_elev - floor_elev) / p
+        else:
+            # otherwise, compute the number of bins with the following constraints
+            # 100 <= elev_step <= 400 feet and is a multiple of 100
+            # with 5 < p < 12, and p = (ceiling_elev - floor_elev) / elev_step
+            elev_range = ceiling_elev - floor_elev
+            print(elev_range)
+            # Calculate test p values for elev_steps between 1-400 feet
+            for elev_step in range(100, 500, 100):
+                if verbose:
+                    print(f'Testing {elev_step}')
+                p = int(elev_range / elev_step)
+                if 5 < p < 12:
+                    print(f'>>>>  An elevation step of {elev_step} is chosen, yielding {p} bins\n')
+                    break
+        if verbose:
+            print(floor_elev, ceiling_elev, elev_step, p)
+        # Loop through the number of bins
+        for r in range(p):
+            low = int(r * elev_step + floor_elev)
+            high = int((r+1) * elev_step + floor_elev)
+            # Get that bin's elev range
+            dem_elev_range = (low, high)
+            if verbose:
+                print(f'Elev range: {dem_elev_range}')
+            dem_elev_ranges, dem_elev_range, dem_bin_arr = construct_elev_bin_dict(p, r, dem_elev_ranges, dem_elev_range, dem_bin_arr)
+            if r == p - 1:
+                dem_bin_arr[(dem_bin_arr >= dem_elev_range[1])] = r + 2
+    # equally spaced binning, no rounding
+    elif equal_spacing:
         elev_step = (dem_bin_arr.max() - dem_bin_arr.min()) / p
         beginning_elev = dem_bin_arr.min()
         for r in range(p):
@@ -562,11 +637,7 @@ def bin_elev(dem: xr.DataArray, basinname: str, equal_spacing: bool = True, p: i
             dem_elev_range = (low, high)
             if verbose:
                 print(f'Elev range: {dem_elev_range}')
-
-            dem_elev_ranges[f'{r * p}_{(r+1) * p}'] = dem_elev_range
-
-            conditions = (dem_bin_arr > dem_elev_range[0]) & (dem_bin_arr <= dem_elev_range[1])
-            dem_bin_arr[conditions] = r + 1
+            dem_elev_ranges, dem_elev_range, dem_bin_arr = construct_elev_bin_dict(p, r, dem_elev_ranges, dem_elev_range, dem_bin_arr)
             if r == p - 1:
                 dem_bin_arr[(dem_bin_arr >= dem_elev_range[1])] = r + 2
     # percentile binning
@@ -578,13 +649,9 @@ def bin_elev(dem: xr.DataArray, basinname: str, equal_spacing: bool = True, p: i
                             int(np.nanpercentile(dem, prange[1])))
             if verbose:
                 print(f'Percentile range: {prange} | elev {dem_elev_range}')
-
-            dem_elev_ranges[f'{r * p}_{(r+1) * p}'] = dem_elev_range
-            conditions = (dem_bin_arr > dem_elev_range[0]) & (dem_bin_arr <= dem_elev_range[1])
-            dem_bin_arr[conditions] = r + 1
+            dem_elev_ranges, dem_elev_range, dem_bin_arr = construct_elev_bin_dict(p, r, dem_elev_ranges, dem_elev_range, dem_bin_arr)
             if r == int(100 / p) - 1:
                 dem_bin_arr[(dem_bin_arr >= dem_elev_range[1])] = r + 2
-
     # Reassign array to dataset
     dem_bin.data = dem_bin_arr
 

@@ -6,6 +6,7 @@ Example usage: calc_basin_peak.py animas 2023 -varfile snow.nc -varname depth -v
 '''
 
 import sys
+import os
 import glob
 import argparse
 
@@ -16,7 +17,6 @@ import pandas as pd
 import xarray as xr
 from pathlib import PurePath
 import copy
-import json
 
 from tqdm import tqdm
 
@@ -26,11 +26,13 @@ def fn_list(thisDir: str, fn_pattern: str, verbose: bool = False) -> List[str]:
     """Match and sort filenames based on a regex pattern in specified directory
 
     Parameters:
+    ----------
         thisDir: directory path to search
         fn_pattern: regex pattern to match files
         verbose: print filenames
 
     Returns:
+    ----------
         fns: list of filenames matched and sorted
     """
     fns = []
@@ -46,6 +48,7 @@ def get_dirs_filenames(basin: str, WY:int, verbose: bool = True, res: int = 100,
     """Find basin directories and water year directory for each model run
 
     Parameters:
+    ----------
         basin: basin name
         WY: water year
         verbose: print filenames
@@ -53,15 +56,12 @@ def get_dirs_filenames(basin: str, WY:int, verbose: bool = True, res: int = 100,
         workdir: model run directory
 
     Returns:
+    ----------
         basindirs: list of basin directories
         wydir: water year directory
     """
-    basindirs = fn_list(workdir, f'{basin}*/*/{basin}*{res}*/')
-    if verbose:
-        [print(b) for b in basindirs]
-
     # Update basindirs for the selected water year
-    basindirs = fn_list(workdir, f'{basin}*/*{WY}/{basin}*{res}*/')
+    basindirs = fn_list(workdir, f'{basin}*/wy{WY}/{basin}*{res}*/')
     wydir = PurePath(basindirs[0]).parents[0].as_posix()
     if verbose:
         [print(b) for b in basindirs]
@@ -72,12 +72,14 @@ def calc_peak(snow_property: pd.Series, verbose: bool = False, snow_name: str = 
     """Finds the date of the maximum snow value from a pandas series.
 
     Parameters:
+    ----------
         snow_property: A pandas series containing snow depth or SWE values.
         verbose: If True, prints additional information. Defaults to False.
         snow_name: The name of the snow property. Defaults to None.
         units: The units of the snow property. Defaults to 'm'.
 
     Returns:
+    ----------
         tuple: A tuple containing the peak date and the maximum value of the snow property.
     """
     # Determine date of maximum value in snow property
@@ -94,26 +96,28 @@ def calc_peak(snow_property: pd.Series, verbose: bool = False, snow_name: str = 
 
     return peak_date, max_val
 
-def calculate_peak_date(basindirs, wydir, wy, verbose=True,
+def calculate_peak_date(basindir, wydir, wy, outname, verbose=True,
                         thisvar='thickness', varname='depth', varfile='snow.nc',
                         drop_var_list = ['thickness', 'snow_density', 'specific_mass', 'liquid_water', 'temp_surf',
                                          'temp_lower', 'temp_snowcover', 'thickness_lower',
                                          'water_saturation', 'projection']):
-    """Calculate peak date and day of year of input snow property  using processing.py calc_peak() func.
-    Generate dictionary of missing peak snow dates and pixel indices with basin model run type as dict key.
+    """Calculate peak date and day of year of input snow property  using calc_peak() func.
+    Generates csvs of missing peak snow dates and pixel indices by basin model run type and water year.
 
     Parameters:
-        basindirs: list of basin directories
+    ----------
+        basindir: basin directory
         wydir: water year directory
         wy: water year
         verbose: print filenames
+        outname: output filename
         thisvar: snow property to calculate peak date
         varname: snow property name
         varfile: iSnobal output filename
         drop_var_list: list of variables to drop from the dataset
 
     Returns:
-        missing_dt_dict: dictionary of missing peak snow dates and pixel indices
+    ----------
         peak_date_ds: xarray dataset containing peak date and day of year of input snow property
     """
     # Amend drop_var_list depending on the snow property
@@ -121,81 +125,85 @@ def calculate_peak_date(basindirs, wydir, wy, verbose=True,
     drop_var_list = [var for var in drop_var_list if var != thisvar]
 
     # Load the snow data
-    ds_concat_list = [xr.open_mfdataset(f'{basindir}*/{varfile}', decode_coords="all", drop_variables=drop_var_list).load() for basindir in basindirs]
+    ds = xr.open_mfdataset(f'{basindir}*/{varfile}', decode_coords="all", drop_variables=drop_var_list).load()
 
-    missing_dt_dict = dict()
-    for basindir, ds in zip(basindirs, ds_concat_list):
-        # Create an empty dataset of the same x and y dims to store the peak values
-        peak_ds = copy.deepcopy(ds.isel(time=0))
-        peak_ds = peak_ds[thisvar]
-        ds = ds[thisvar]
-        peak_arr = peak_ds.data
-        if verbose:
-            print(peak_arr.shape)
+    # Create an empty dataset of the same x and y dims to store the peak values
+    peak_ds = copy.deepcopy(ds.isel(time=0))
+    peak_ds = peak_ds[thisvar]
+    ds = ds[thisvar]
+    peak_arr = peak_ds.data
+    if verbose:
+        print(peak_arr.shape)
 
-        # Create an empty list for keeping track of missing peak pixels
-        missing_list = []
+    # Create an empty list for keeping track of missing peak pixels
+    missing_list = []
 
-        if verbose:
-            print('Begin looping...')
-        # fill the array with the peak value if calculable
-        for i in tqdm(range(peak_ds.x.size)):
-            for j in range(peak_ds.y.size):
-                try:
-                    # if verbosity true, output is unmanageable with tqdm
-                    peak, _ = calc_peak(ds[:,j,i].to_series(), verbose=False)
-                except Exception as e:
-                    e.add_note(f"Something wrong with peak extract for {i, j}")
-                    # store the pixel where peak extraction is an issue
-                    missing_list.append((i, j))
+    if verbose:
+        print('Begin looping...')
+    # fill the array with the peak value if calculable
+    for i in tqdm(range(peak_ds.x.size)):
+        for j in range(peak_ds.y.size):
+            try:
+                # if verbosity true, output is unmanageable with tqdm
+                peak, _ = calc_peak(ds[:,j,i].to_series(), verbose=False)
+            except Exception as e:
+                e.add_note(f"Something wrong with peak extract for {i, j}")
+                # store the pixel where peak extraction is an issue
+                missing_list.append((i, j))
 
-                    # add default bogus day to continue
-                    peak = pd.Timestamp(year=wy, month=12, day=25)
+                # add default bogus day to continue
+                peak = pd.Timestamp(year=wy, month=12, day=25)
 
-                peak_arr[j, i] = peak.timestamp()
+            peak_arr[j, i] = peak.timestamp()
 
-        if verbose:
-            print('Storing missing list in dict')
-        # enter the missing_list into a dict using the basindir stems as keys
-        missing_dt_dict[PurePath(basindirs[0]).stem] = missing_list
+    if verbose:
+        print('Saving missing list to csv')
 
-        peak_ds.data = peak_arr
+    # Dump missing peak snow date list to file
+    ending = f'wy{wy}'
+    missing_name = f'{wydir}/missing_peak_{varname}_{PurePath(basindir).stem}_{ending}.csv'
+    with open(missing_name, 'w') as fp:
+        fp.write(",".join(missing_list))
 
-        # Update var name
-        peak_ds.name = 'peak'
+    peak_ds.data = peak_arr
 
-        # remove the time coordinates
+    # Update var name
+    peak_ds.name = 'peak'
+
+    # remove the time coordinates if they exist
+    try:
         peak_ds = peak_ds.drop_vars('time')
+    except:
+        pass
 
-        peak_date_ds = peak_ds.to_dataset()
-        # Convert to datetime to access .dt.dayofyear for DOY calc
-        # Needs to be in seconds, put up with nanosecond precision warning
-        if verbose:
-            print('Converting peak type to datetime64')
-        peak_date_ds['peak'] = peak_date_ds['peak'].astype('datetime64[s]')
+    peak_date_ds = peak_ds.to_dataset()
+    # Convert to datetime to access .dt.dayofyear for DOY calc
+    # Needs to be in seconds, put up with nanosecond precision warning
+    if verbose:
+        print('Converting peak type to datetime64')
+    peak_date_ds['peak'] = peak_date_ds['peak'].astype('datetime64[s]')
 
-        if verbose:
-            print('Calculating DOY')
-        # Calculate Day of year
-        peak_date_ds['peak_doy'] = peak_date_ds['peak'].dt.dayofyear
+    if verbose:
+        print('Calculating DOY')
+    # Calculate Day of year
+    peak_date_ds['peak_doy'] = peak_date_ds['peak'].dt.dayofyear
 
-        # Clean up attributes
-        peak_date_ds['peak'].attrs = dict()
-        peak_date_ds['peak_doy'].attrs = dict()
+    # Clean up attributes
+    peak_date_ds['peak'].attrs = dict()
+    peak_date_ds['peak_doy'].attrs = dict()
 
-        # Assign dt units in encoding, doing this in attributes creates issues
-        peak_date_ds['peak'].attrs = dict(description='peak {varname} date for each pixel in the domain')
-        peak_date_ds['peak'].encoding['units'] = "seconds since 1970-01-01 00:00:00"
-        peak_date_ds['peak_doy'].attrs = dict(units='day of year',
-                                            description=f'peak {varname} day of year for each pixel in the domain')
+    # Assign dt units in encoding, doing this in attributes creates issues
+    peak_date_ds['peak'].attrs = dict(description='peak {varname} date for each pixel in the domain')
+    peak_date_ds['peak'].encoding['units'] = "seconds since 1970-01-01 00:00:00"
+    peak_date_ds['peak_doy'].attrs = dict(units='day of year',
+                                        description=f'peak {varname} day of year for each pixel in the domain')
 
-        outname = f'{wydir}/{PurePath(basindir).stem}_peak_{varname}_wy{wy}.nc'
-        if verbose:
-            print(f'Writing out netcdf...\n{outname}')
-        # write this out
-        peak_date_ds.to_netcdf(f'{outname}')
+    if verbose:
+        print(f'Writing out netcdf...\n{outname}')
+    # write this out
+    peak_date_ds.to_netcdf(f'{outname}')
 
-    return missing_dt_dict, peak_date_ds
+    return peak_date_ds
 
 def parse_arguments():
     """Parse command line arguments.
@@ -209,6 +217,7 @@ def parse_arguments():
     parser.add_argument('-varfile', type=str, help='iSnobal output filename', default='snow.nc')
     parser.add_argument('-varname', type=str, help='variable common name', choices=['depth', 'swe', 'density'], default='depth')
     parser.add_argument('-v', '--verbose', default=True, help='Print filenames')
+    parser.add_argument('-ow', '--overwrite', help='Overwrite existing files', default=False)
     return parser.parse_args()
 
 def __main__():
@@ -218,6 +227,8 @@ def __main__():
     varfile = args.varfile
     varname = args.varname
     verbose = args.verbose
+    overwrite = args.overwrite
+
     if varname == 'depth':
         thisvar = 'thickness'
     elif varname == 'swe':
@@ -232,16 +243,16 @@ def __main__():
     # Extract the basin directories, water year and list of daily snow.nc files for each model run
     basindirs, wydir = get_dirs_filenames(basin, WY, verbose=verbose)
 
-    print('Load snow data and calculate peak snow date')
-    # Calculate the per-pixel snow date
-    missing_peak_dict, _ = calculate_peak_date(basindirs, wydir, wy=WY, verbose=verbose,
-                                               thisvar=thisvar, varname=varname, varfile=varfile)
-
-    print('Write out to json')
-    # Dump missing snow date dictionary to json file
-    ending = f'_WY{WY}'
-    with open(f'{wydir}/missing_peak_dict{ending}.json', 'w') as fp:
-        json.dump(missing_peak_dict, fp)
+    # Calculate the per-pixel peak snow date for each basin directory
+    for basindir in basindirs:
+        outname = f'{wydir}/{PurePath(basindir).stem}_peak_{varname}_wy{WY}.nc'
+        if os.path.exists(outname) and not overwrite:
+            print(f'Output file already exists: {outname}')
+            pass
+        else:
+            print('Load snow data and calculate peak snow date')
+            _ = calculate_peak_date(basindir, wydir, wy=WY, outname=outname, verbose=verbose,
+                                    thisvar=thisvar, varname=varname, varfile=varfile)
 
 if __name__ == "__main__":
     __main__()

@@ -5,7 +5,9 @@ files/
 *.ipynb_checkpoints/
 __pycache__
 */nwm/hydroshare/
-*/*.csv
+**/*.csv
 */*/*txt
 pngs/
 *.html
+*/csvs/
+*slurm_logs*
