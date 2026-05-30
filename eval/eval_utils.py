@@ -25,7 +25,7 @@ import processing as proc
 
 def load_config(path: str) -> dict:
     """Load a YAML config file and return it as a dict."""
-    with open(path) as f:
+    with open(path, encoding='utf-8') as f:
         return yaml.safe_load(f)
 
 
@@ -75,12 +75,25 @@ def load_snotel(config: dict, site_ids: list | None = None) -> pd.DataFrame:
     Returns a DataFrame with a DatetimeIndex and columns
     [site_name, <variable>, x_utm, y_utm]. site_name is repeated per row
     so the caller can groupby('site_name'). Unit conversion per INTERFACE_SPEC §2.5.
+
+    Cache: if config['snotel']['cache_parquet'] is set and the file exists, load it
+    directly (skips network). If set but missing, fetches and saves after success.
+    This allows pre-fetching on a login node, then reuse on compute nodes.
     """
+    import warnings
     snotel_cfg = config['snotel']
     snowvar = snotel_cfg.get('snowvar', 'SNOWDEPTH')
     buffer_m = int(snotel_cfg.get('buffer_m', 200))
     wy = config['water_year']
     epsg = config['epsg']
+    cache_path = snotel_cfg.get('cache_parquet')
+
+    if cache_path and pathlib.Path(cache_path).exists():
+        df = pd.read_parquet(cache_path)
+        df.index = pd.to_datetime(df.index)
+        if site_ids is not None:
+            df = df[df['site_name'].isin(site_ids)]
+        return df
 
     sites_gdf = proc.locate_snotel_in_poly(
         config['paths']['basin_poly'],
@@ -99,24 +112,40 @@ def load_snotel(config: dict, site_ids: list | None = None) -> pd.DataFrame:
     site_names = sites_gdf['site_name'].tolist()
     states = sites_gdf['state'].tolist()
 
-    coord_gdf, dfs = proc.get_snotel(
-        sitenum=site_nums,
-        sitename=site_names,
-        ST=states,
-        WY=wy,
-        epsg=epsg,
-        snowvar=snowvar,
-    )
+    from tqdm.auto import tqdm
 
-    # Map site_name → UTM coords from coord_gdf (order matches site iteration)
-    name_to_xy = {
-        name: (coord_gdf.iloc[i].geometry.x, coord_gdf.iloc[i].geometry.y)
-        for i, name in enumerate(site_names)
-        if i < len(coord_gdf)
-    }
+    name_to_xy = {}
+    all_dfs = {}
+    for i, (num, name, state) in enumerate(tqdm(
+        zip(site_nums, site_names, states),
+        total=len(site_nums),
+        desc='Fetching SNOTEL',
+        unit='site',
+    )):
+        try:
+            coord_gdf_i, dfs_i = proc.get_snotel(
+                sitenum=[num],
+                sitename=[name],
+                ST=[state],
+                WY=wy,
+                epsg=epsg,
+                snowvar=snowvar,
+            )
+            if len(coord_gdf_i):
+                name_to_xy[name] = (coord_gdf_i.iloc[0].geometry.x, coord_gdf_i.iloc[0].geometry.y)
+            all_dfs.update(dfs_i)
+        except Exception as e:
+            warnings.warn(f"SNOTEL fetch failed for {name} ({e}), skipping.")
+
+    if not all_dfs:
+        warnings.warn(
+            "All SNOTEL fetches failed. If on a compute node, pre-fetch on a "
+            "login node and set config['snotel']['cache_parquet'] to the saved path."
+        )
+        return pd.DataFrame()
 
     frames = []
-    for site_name, df in dfs.items():
+    for site_name, df in all_dfs.items():
         if snowvar == 'SNOWDEPTH' and 'SNOWDEPTH_m' in df.columns:
             out = df[['SNOWDEPTH_m']].copy()
             out.columns = ['thickness']
@@ -135,7 +164,14 @@ def load_snotel(config: dict, site_ids: list | None = None) -> pd.DataFrame:
     if not frames:
         return pd.DataFrame()
 
-    return pd.concat(frames).sort_index()
+    result = pd.concat(frames).sort_index()
+
+    if cache_path:
+        pathlib.Path(cache_path).parent.mkdir(parents=True, exist_ok=True)
+        result.to_parquet(cache_path)
+        print(f"SNOTEL data cached to {cache_path}")
+
+    return result
 
 
 # ---------------------------------------------------------------------------

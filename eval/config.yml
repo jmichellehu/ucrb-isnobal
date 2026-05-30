@@ -25,3 +25,6 @@ snotel:
     SWE: specific_mass
   snowvar: SNOWDEPTH
   buffer_m: 200
+  # cache_parquet: pre-fetch on a login node, then reuse on compute nodes.
+  # Set path, run load_snotel() once with network access to populate it.
+  cache_parquet: /uufs/chpc.utah.edu/common/home/u6058223/git_dirs/ucrb-isnobal/eval/output/animas_wy2024/snotel_cache.parquet
