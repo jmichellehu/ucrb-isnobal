@@ -1,0 +1,27 @@
+basin: animas
+water_year: 2024
+
+paths:
+  snow_zarr: /uufs/chpc.utah.edu/common/home/skiles-group2/model_runs_jmh/thp/zarr_stores/animas_unified_snow_wy2024.zarr
+  em_zarr:   /uufs/chpc.utah.edu/common/home/skiles-group2/model_runs_jmh/thp/zarr_stores/animas_unified_em_wy2024.zarr
+  net_solar_zarr: /uufs/chpc.utah.edu/common/home/skiles-group2/model_runs_jmh/thp/zarr_stores/animas_unified_net_solar_wy2024.zarr
+  topo_nc:   /uufs/chpc.utah.edu/common/home/skiles-group3/jmhu/isnobal_scripts/animas_setup/output_100m/topo.nc
+  snotel_sites_geojson: /uufs/chpc.utah.edu/common/home/skiles-group3/ancillary_sdswe_products/SNOTEL/snotel_sites_32613.json
+  basin_poly: /uufs/chpc.utah.edu/common/home/skiles-group3/jmhu/ancillary/polys/animas.shp
+  output_dir: /uufs/chpc.utah.edu/common/home/u6058223/git_dirs/ucrb-isnobal/eval/output/animas_wy2024
+
+epsg: 32613
+state: CO
+
+terrain_filter:
+  elev_range: [2500, 4000]
+  aspect_range: [315, 45]
+  slope_max: 45
+  veg_classes: null
+
+snotel:
+  variable_mapping:
+    SNOWDEPTH: thickness
+    SWE: specific_mass
+  snowvar: SNOWDEPTH
+  buffer_m: 200

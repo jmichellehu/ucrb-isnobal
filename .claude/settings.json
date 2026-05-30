@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir*)",
+      "Bash(ls*)",
+      "Bash(find*)",
+      "Bash(python*)",
+      "Bash(conda run*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Write(/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/ucrb-isnobal/eval/*)",
+      "Write(/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/ucrb-isnobal/isnobal_eval/*)",
+      "Write(/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/ucrb-isnobal/dashboard/*)",
+      "Write(/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/ucrb-isnobal/reports/*)",
+      "Write(/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/ucrb-isnobal/setup.py)"
+    ],
+    "deny": [
+      "Bash(rm *)",
+      "Bash(rmdir*)",
+      "Bash(chmod*)",
+      "Bash(chown*)",
+      "Bash(mv *)",
+      "Bash(git push*)",
+      "Bash(git reset*)",
+      "Bash(git checkout*)",
+      "Bash(git clean*)",
+      "Bash(git rebase*)",
+      "Bash(pip install*)",
+      "Bash(conda install*)",
+      "Bash(sudo*)",
+      "Bash(*> /*)",
+      "Bash(*>> /*)"
+    ]
+  }
+}
