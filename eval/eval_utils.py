@@ -12,11 +12,18 @@ import pandas as pd
 import xarray as xr
 import geopandas as gpd
 
-# processing.py requires its own env/ helpers; add both paths before importing
-_REPO = pathlib.Path(__file__).parent.parent
-sys.path.insert(0, str(_REPO / 'scripts'))
-sys.path.insert(0, '/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/env/')
-import processing as proc
+# Prefer the lightweight standalone snotel_io; fall back to processing.py on CHPC
+try:
+    from snotel_io import locate_snotel_in_poly, get_snotel as _get_snotel
+    _USE_SNOTEL_IO = True
+except ImportError:
+    _REPO = pathlib.Path(__file__).parent.parent
+    sys.path.insert(0, str(_REPO / 'scripts'))
+    sys.path.insert(0, '/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/env/')
+    import processing as proc
+    locate_snotel_in_poly = proc.locate_snotel_in_poly
+    _get_snotel = proc.get_snotel
+    _USE_SNOTEL_IO = False
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +130,7 @@ def load_snotel(config: dict, site_ids: list | None = None) -> pd.DataFrame:
         unit='site',
     )):
         try:
-            coord_gdf_i, dfs_i = proc.get_snotel(
+            coord_gdf_i, dfs_i = _get_snotel(
                 sitenum=[num],
                 sitename=[name],
                 ST=[state],

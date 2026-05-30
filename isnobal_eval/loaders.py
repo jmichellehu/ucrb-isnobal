@@ -7,17 +7,27 @@ import pandas as pd
 import xarray as xr
 import geopandas as gpd
 
-# Load processing.py via importlib to avoid sys.path mutation at package level.
-# processing.py requires env/helpers.py; add that path before loading.
+# Prefer the lightweight standalone snotel_io; fall back to processing.py on CHPC.
+# processing.py chains through helpers.py which has heavy module-level imports
+# (rioxarray, rasterio, matplotlib-scalebar) unused by any eval function.
 import sys as _sys
-_env_path = '/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/env/'
-if _env_path not in _sys.path:
-    _sys.path.insert(0, _env_path)
-
-_proc_path = pathlib.Path(__file__).parents[1] / 'scripts' / 'processing.py'
-_spec = importlib.util.spec_from_file_location('processing', _proc_path)
-proc = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(proc)
+try:
+    _eval_dir = str(pathlib.Path(__file__).parents[1] / 'eval')
+    if _eval_dir not in _sys.path:
+        _sys.path.insert(0, _eval_dir)
+    from snotel_io import locate_snotel_in_poly, get_snotel as _get_snotel
+    _USE_SNOTEL_IO = True
+except ImportError:
+    _env_path = '/uufs/chpc.utah.edu/common/home/u6058223/git_dirs/env/'
+    if _env_path not in _sys.path:
+        _sys.path.insert(0, _env_path)
+    _proc_path = pathlib.Path(__file__).parents[1] / 'scripts' / 'processing.py'
+    _spec = importlib.util.spec_from_file_location('processing', _proc_path)
+    proc = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(proc)
+    locate_snotel_in_poly = proc.locate_snotel_in_poly
+    _get_snotel = proc.get_snotel
+    _USE_SNOTEL_IO = False
 
 
 def load_snow(config: dict) -> xr.Dataset:
@@ -67,7 +77,7 @@ def load_snotel(config: dict, site_ids: list | None = None) -> pd.DataFrame:
     wy = config['water_year']
     epsg = config['epsg']
 
-    sites_gdf = proc.locate_snotel_in_poly(
+    sites_gdf = locate_snotel_in_poly(
         config['paths']['basin_poly'],
         config['paths']['snotel_sites_geojson'],
         buffer=buffer_m,
@@ -84,7 +94,7 @@ def load_snotel(config: dict, site_ids: list | None = None) -> pd.DataFrame:
     site_names = sites_gdf['site_name'].tolist()
     states     = sites_gdf['state'].tolist()
 
-    coord_gdf, dfs = proc.get_snotel(
+    coord_gdf, dfs = _get_snotel(
         sitenum=site_nums,
         sitename=site_names,
         ST=states,

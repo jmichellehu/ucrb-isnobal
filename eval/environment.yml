@@ -1,0 +1,35 @@
+name: isnobal-eval
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python>=3.10
+  # data
+  - numpy
+  - pandas
+  - xarray
+  - zarr
+  - numcodecs
+  - netcdf4
+  - dask
+  # geospatial
+  - geopandas
+  - shapely
+  - pyarrow
+  # visualization — notebook
+  - matplotlib
+  - jupyter
+  - ipykernel
+  # visualization — dashboard (omit if only running the notebook)
+  - panel
+  - hvplot
+  - holoviews
+  - bokeh
+  # config validation (dashboard / Plan 2 only)
+  - pydantic
+  # utilities
+  - pyyaml
+  - tqdm
+  - pip
+  - pip:
+    - metloom

@@ -1,0 +1,15 @@
+name: snotel-fetch
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python>=3.10
+  - numpy
+  - pandas
+  - geopandas
+  - pyarrow
+  - pyyaml
+  - tqdm
+  - pip
+  - pip:
+    - metloom
